@@ -26,7 +26,7 @@ uv run acdc-seg
 ## Layout
 
 ```
-src/cellacdc/
+cellacdc/
   __main__.py              # CLI entry
   segmentation/
     model.py               # State and I/O orchestration
