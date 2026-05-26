@@ -6,38 +6,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import tifffile
 
 from acdc.data import ImageData, coalesce_images
-from acdc.overlay import list_sibling_channels, load_channel_image
-from acdc.segment import io, tools
 from acdc.segment.model import SegmentationModel
 from acdc.volume.model import VolumeModel
-from tests.test_experiment_io import _make_position, _write_metadata
-
-
-def test_list_sibling_channels_excludes_reference(tmp_path: Path) -> None:
-    images = _make_position(tmp_path, "Position_1")
-    channels = list_sibling_channels(images)
-    assert sorted(channels) == ["gfp", "phase"]
-    assert list_sibling_channels(images, exclude="phase") == ["gfp"]
-
-
-def test_load_channel_image_validates_shape(tmp_path: Path) -> None:
-    images = _make_position(tmp_path, "Position_1")
-    layout = tools.layout_from_metadata((16, 16), size_t=1, size_z=1)
-    phase = load_channel_image(images, "phase", layout=layout)
-    assert phase.shape == (16, 16)
-
-    bad = np.zeros((8, 8), dtype=np.uint16)
-    tifffile.imwrite(images / "test_s01_mCherry.tif", bad)
-    _write_metadata(
-        images,
-        "test_s01_",
-        channels=("phase", "gfp", "mCherry"),
-    )
-    with pytest.raises(ValueError, match="does not match"):
-        load_channel_image(images, "mCherry", layout=layout)
+from tests.test_experiment_io import _make_position
 
 
 def test_from_path_channels_loads_each_channel(tmp_path: Path) -> None:

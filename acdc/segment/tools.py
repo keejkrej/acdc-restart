@@ -170,17 +170,6 @@ def fill_label_holes(mask_slice: np.ndarray, label: int) -> bool:
     return True
 
 
-def filter_visible_labels(
-    mask_slice: np.ndarray,
-    visible_ids: set[int],
-) -> np.ndarray:
-    """Return a mask slice showing only ``visible_ids`` (background elsewhere)."""
-    if not visible_ids:
-        return np.zeros_like(mask_slice)
-    visible = np.fromiter(visible_ids, dtype=mask_slice.dtype)
-    return np.where(np.isin(mask_slice, visible), mask_slice, np.uint32(0))
-
-
 def apply_label_visibility(
     mask_slice: np.ndarray,
     hidden_ids: set[int],
@@ -287,49 +276,4 @@ def labels_to_contour_rgba(
     ids = mask_slice[boundary].astype(np.intp)
     rgba[boundary] = lut[ids]
     rgba[boundary, 3] = np.ubyte(alpha)
-    return rgba
-
-
-def _label_rgb(label: int, c: float = 0.85) -> tuple[float, float, float]:
-    hue = (int(label) * 47) % 360
-    hp = hue / 60.0
-    x = c * (1 - abs(hp % 2 - 1))
-    if hp < 1:
-        return (c, x, 0)
-    if hp < 2:
-        return (x, c, 0)
-    if hp < 3:
-        return (0, c, x)
-    if hp < 4:
-        return (0, x, c)
-    if hp < 5:
-        return (x, 0, c)
-    return (c, 0, x)
-
-
-def build_label_lut(num_entries: int = 4096, alpha: float = 0.45) -> np.ndarray:
-    """Build an RGBA lookup table for label IDs (index 0 is transparent)."""
-    lut = np.zeros((num_entries, 4), dtype=np.ubyte)
-    alpha_u8 = int(round(alpha * 255))
-    for label in range(1, num_entries):
-        r, g, b = _label_rgb(label)
-        lut[label] = (int(r * 255), int(g * 255), int(b * 255), alpha_u8)
-    return lut
-
-
-def labels_to_rgba(mask_slice: np.ndarray, alpha: float = 0.45) -> np.ndarray:
-    """Map label IDs to RGBA overlay (background transparent)."""
-    h, w = mask_slice.shape
-    rgba = np.zeros((h, w, 4), dtype=np.float32)
-    labels = np.unique(mask_slice)
-    labels = labels[labels > 0]
-    if labels.size == 0:
-        return rgba
-    for label in labels:
-        sel = mask_slice == label
-        r, g, b = _label_rgb(label)
-        rgba[sel, 0] = r
-        rgba[sel, 1] = g
-        rgba[sel, 2] = b
-        rgba[sel, 3] = alpha
     return rgba

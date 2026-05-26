@@ -9,18 +9,6 @@ from acdc.display_levels import autoscale_levels, scale_to_unit, stack_display_l
 from acdc.segment import tools
 
 
-def array_volume_zyx(
-    image: np.ndarray,
-    layout: tools.StackLayout,
-    *,
-    t_index: int = 0,
-) -> np.ndarray:
-    """Return a ``(Z, Y, X)`` stack from a raw array for the given time index."""
-    vol4 = tools.normalize_to_4d(image, layout)
-    t = max(0, min(int(t_index), vol4.shape[0] - 1))
-    return np.asarray(vol4[t])
-
-
 def volume_zyx(
     imaged: ImageData,
     *,

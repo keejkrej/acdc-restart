@@ -310,14 +310,3 @@ def images_path_for_position(
         if position_name_from_images_path(path) == position_name:
             return path
     raise ValueError(f'Position "{position_name}" not found under "{folder}"')
-
-
-def resolve_folder_load(folder: Path, channel_name: str | None = None) -> PositionLoadSpec:
-    """Resolve folder to a single ``PositionLoadSpec`` (one Images folder)."""
-    images_paths = resolve_images_paths(folder)
-    if len(images_paths) != 1:
-        raise ValueError("Multiple positions require explicit selection")
-    images_path = images_paths[0]
-    _basename, channels = discover_basename_and_channels(images_path)
-    chosen = channel_name or channels[0]
-    return build_load_spec(images_path, chosen)

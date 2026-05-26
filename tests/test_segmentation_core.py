@@ -53,16 +53,6 @@ def test_fill_label_holes() -> None:
     assert mask[10, 10] == 1
 
 
-def test_filter_visible_labels() -> None:
-    mask = np.zeros((8, 8), dtype=np.uint32)
-    mask[0:4, 0:4] = 1
-    mask[4:8, 4:8] = 2
-    filtered = tools.filter_visible_labels(mask, {1})
-    assert filtered[2, 2] == 1
-    assert filtered[6, 6] == 0
-    assert tools.filter_visible_labels(mask, set()).max() == 0
-
-
 def test_apply_label_visibility() -> None:
     mask = np.zeros((8, 8), dtype=np.uint32)
     mask[0:4, 0:4] = 1
@@ -97,7 +87,8 @@ def test_find_outer_boundaries() -> None:
 def test_labels_to_contour_rgba() -> None:
     mask = np.zeros((8, 8), dtype=np.uint32)
     mask[2:6, 2:6] = 1
-    lut = tools.build_label_lut(8, alpha=0.45)
+    lut = np.zeros((8, 4), dtype=np.uint8)
+    lut[1] = (255, 0, 0, 114)
     rgba = tools.labels_to_contour_rgba(mask, lut)
     assert rgba[2, 3, 3] == 255
     assert rgba[3, 3, 3] == 0
