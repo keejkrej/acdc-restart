@@ -6,8 +6,8 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from cellacdc.data import ImageData, SegmentationResult, coalesce_images, default_segmentation
-from cellacdc.display_levels import stack_display_levels
+from acdc.data import ImageData, SegmentationResult, coalesce_images, default_segmentation
+from acdc.display_levels import stack_display_levels
 
 
 class VolumeModel:
@@ -61,7 +61,7 @@ class VolumeModel:
             self.secondary_stack_levels = None
             self.secondary_display_clim = None
             return
-        from cellacdc.overlay import overlay_stack_array
+        from acdc.overlay import overlay_stack_array
 
         overlay = overlay_stack_array(self.overlay_channels)
         (self.secondary_stack_levels, self.secondary_display_clim) = stack_display_levels(

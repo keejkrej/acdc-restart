@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cellacdc.segmentation.lut import BaseLutBar, lut_with_hidden_labels
+from acdc.segment.lut import BaseLutBar, lut_with_hidden_labels
 
 _LABEL_ALPHA = int(round(0.45 * 255))
 

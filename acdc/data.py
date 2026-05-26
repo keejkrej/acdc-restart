@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cellacdc.segmentation import experiment, io, tools
+from acdc.segment import experiment, io, tools
 
 
 @dataclass(frozen=True)
@@ -207,4 +207,24 @@ def default_segmentation(imaged: ImageData) -> SegmentationResult:
         except ValueError:
             pass
     return SegmentationResult.empty_like(imaged)
+
+
+def load(
+    path: str | Path,
+    *,
+    channels: Sequence[str] | None = None,
+    channel: str | None = None,
+    position: str | None = None,
+    segmentation: SegmentationResult | None = None,
+) -> tuple[tuple[ImageData, ...], SegmentationResult]:
+    """Load channel(s) and a matching segmentation mask (existing or new empty)."""
+    if channels is not None:
+        images = coalesce_images(
+            ImageData.from_path_channels(path, channels, position=position)
+        )
+    else:
+        images = (ImageData.from_path(path, position=position, channel=channel),)
+    if segmentation is None:
+        segmentation = default_segmentation(images[0])
+    return images, segmentation
 

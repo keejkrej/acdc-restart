@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cellacdc.segmentation import tools
+from acdc.segment import tools
 
 
 def autoscale_levels(data: np.ndarray) -> tuple[float, float]:

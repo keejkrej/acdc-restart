@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cellacdc.blend import crossfade_opacities, layer_opacities
+from acdc.blend import crossfade_opacities, layer_opacities
 
 
 def test_crossfade_opacities_endpoints() -> None:

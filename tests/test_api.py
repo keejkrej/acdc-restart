@@ -6,13 +6,14 @@ from pathlib import Path
 
 import numpy as np
 
-from cellacdc.data import (
+from acdc.data import (
     ImageData,
     SegmentationResult,
     default_segmentation,
+    load,
 )
-from cellacdc.segmentation import io, tools
-from cellacdc.segmentation.model import SegmentationModel
+from acdc.segment import io, tools
+from acdc.segment.model import SegmentationModel
 
 
 def test_imaged_from_arrays() -> None:
@@ -107,7 +108,7 @@ def test_apply_brush_stroke_on_bound_result() -> None:
 
 
 def test_segmentation_viewer_open_binds_result() -> None:
-    from cellacdc.segmentation.viewer import SegmentationViewer
+    from acdc.segment.viewer import SegmentationViewer
 
     imaged = ImageData.from_arrays(np.zeros((6, 6), dtype=np.uint8))
     result = SegmentationResult.empty_like(imaged)
@@ -118,42 +119,76 @@ def test_segmentation_viewer_open_binds_result() -> None:
     assert viewer.result is result
 
 
-def test_imshow_returns_viewer_and_result() -> None:
-    from cellacdc.segmentation.viewer import imshow
+def test_segment_returns_images_and_segmentation() -> None:
+    from qtpy.QtCore import QTimer
+
+    from acdc.segment.viewer import current_viewer, segment
 
     imaged = ImageData.from_arrays(np.zeros((6, 6), dtype=np.uint8))
     result = SegmentationResult.empty_like(imaged)
-    viewer, opened = imshow([imaged], result, show=False)
-    assert viewer.model.has_data
+
+    def close_window() -> None:
+        viewer = current_viewer()
+        assert viewer is not None
+        viewer.view.close()
+
+    QTimer.singleShot(0, close_window)
+    out_images, opened = segment([imaged], result)
     assert opened is result
-    assert opened.mask is result.mask
+    assert out_images == (imaged,)
 
 
-def test_volume_imshow_returns_viewer_and_result() -> None:
-    from cellacdc.volume.viewer import imshow
+def test_volume_returns_images_and_segmentation() -> None:
+    from qtpy.QtCore import QTimer
+
+    from acdc.volume.viewer import current_volume_viewer, volume
 
     image = np.zeros((4, 8, 8), dtype=np.uint16)
     imaged = ImageData.from_arrays(image)
     result = SegmentationResult.empty_like(imaged)
-    viewer, opened = imshow([imaged], result, show=False)
-    assert viewer.model.has_data
+
+    def close_window() -> None:
+        viewer = current_volume_viewer()
+        assert viewer is not None
+        viewer.view.close()
+
+    QTimer.singleShot(0, close_window)
+    out_images, opened = volume([imaged], result)
     assert opened is result
+    assert out_images == (imaged,)
 
 
-def test_volume_imshow_accepts_channel_list() -> None:
-    from cellacdc.volume.viewer import imshow
+def test_volume_accepts_channel_list() -> None:
+    from acdc.volume.viewer import VolumeViewer
 
     primary = ImageData.from_arrays(np.zeros((4, 8, 8), dtype=np.uint16))
     overlay = ImageData.from_arrays(np.ones((4, 8, 8), dtype=np.uint16) * 100, title="gfp")
     result = SegmentationResult.empty_like(primary)
-    viewer, opened = imshow([primary, overlay], result, show=False)
+    viewer = VolumeViewer()
+    viewer.open([primary, overlay], result)
     assert viewer.model.has_data
     assert viewer.model.overlay_channels == [overlay]
-    assert opened is result
+    assert viewer.result is result
+
+
+def test_load_returns_images_and_segmentation(tmp_path: Path) -> None:
+    images_dir = tmp_path / "Position_1" / "Images"
+    images_dir.mkdir(parents=True)
+    import tifffile
+
+    tifffile.imwrite(images_dir / "demo_s01_phase.tif", np.zeros((16, 16), dtype=np.uint16))
+    (images_dir / "demo_s01_metadata.csv").write_text(
+        "Description,values\nbasename,demo_s01_\nSizeT,1\nSizeZ,1\n"
+        "channel_0_name,phase\n",
+        encoding="utf-8",
+    )
+    loaded_images, segmentation = load(tmp_path / "Position_1", channel="phase")
+    assert len(loaded_images) == 1
+    assert segmentation.mask.shape == loaded_images[0].image.shape
 
 
 def test_volume_viewer_open_without_show() -> None:
-    from cellacdc.volume.viewer import VolumeViewer
+    from acdc.volume.viewer import VolumeViewer
 
     image = np.zeros((4, 8, 8), dtype=np.uint16)
     image[:, 3:5, 3:5] = 500

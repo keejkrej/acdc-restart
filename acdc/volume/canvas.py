@@ -7,10 +7,10 @@ import pyqtgraph as pg
 from qtpy.QtCore import Qt, QTimer
 from qtpy.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
-from cellacdc.blend import layer_opacities
-from cellacdc.volume.cmaps import label_lut_to_vispy, pg_colormap_to_vispy
-from cellacdc.volume.lut import VolumeImageLutBar, VolumeLabelLutBar
-from cellacdc.volume.prepare import voxel_display_scale
+from acdc.blend import layer_opacities
+from acdc.volume.cmaps import label_lut_to_vispy, pg_colormap_to_vispy
+from acdc.volume.lut import VolumeImageLutBar, VolumeLabelLutBar
+from acdc.volume.prepare import voxel_display_scale
 
 
 class _LutColumn(QWidget):

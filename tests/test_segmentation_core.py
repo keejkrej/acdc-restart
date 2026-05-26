@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from cellacdc.segmentation import io, tools
-from cellacdc.segmentation.model import SegmentationModel
+from acdc.segment import io, tools
+from acdc.segment.model import SegmentationModel
 
 
 def test_apply_brush_and_save_roundtrip(tmp_path: Path) -> None:
@@ -75,7 +75,7 @@ def test_apply_label_visibility() -> None:
 
 
 def test_lut_with_hidden_labels() -> None:
-    from cellacdc.segmentation.lut import lut_with_hidden_labels
+    from acdc.segment.lut import lut_with_hidden_labels
 
     lut = np.zeros((8, 4), dtype=np.uint8)
     lut[1] = (255, 0, 0, 128)

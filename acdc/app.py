@@ -7,7 +7,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from qtpy.QtWidgets import QApplication
+    from qtpy.QtWidgets import QApplication, QWidget
 
 _qt_configured = False
 
@@ -37,3 +37,15 @@ def run(*, force: bool = False) -> int:
         )
         return 0
     return app.exec()
+
+
+def exec_until_closed(window: QWidget) -> None:
+    """Run a nested event loop until ``window`` emits ``closed`` or is destroyed."""
+    from qtpy.QtCore import QEventLoop
+
+    get_qapp()
+    loop = QEventLoop()
+    if hasattr(window, "closed"):
+        window.closed.connect(loop.quit)
+    window.destroyed.connect(loop.quit)
+    loop.exec()

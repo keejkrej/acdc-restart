@@ -7,8 +7,8 @@ from pathlib import Path
 
 from qtpy.QtWidgets import QMessageBox
 
-from cellacdc.data import ImageData, SegmentationResult, default_segmentation
-from cellacdc.overlay import overlay_label
+from acdc.data import ImageData, SegmentationResult, default_segmentation
+from acdc.overlay import overlay_label
 
 from . import experiment
 from .model import SegmentationModel

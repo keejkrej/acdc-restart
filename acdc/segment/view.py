@@ -7,7 +7,7 @@ import pyqtgraph as pg
 from pyqtgraph import Point
 from pyqtgraph import functions as fn
 from qtpy.QtCore import QEvent, Qt, Signal
-from qtpy.QtGui import QActionGroup
+from qtpy.QtGui import QActionGroup, QCloseEvent
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QAction,
@@ -25,15 +25,15 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from cellacdc.blend import layer_opacities
-from cellacdc.blend_controls import BlendControlBar
-from cellacdc.dialogs import pick_from_list, pick_many_from_list
+from acdc.blend import layer_opacities
+from acdc.blend_controls import BlendControlBar
+from acdc.dialogs import pick_from_list, pick_many_from_list
 
-from cellacdc.display_levels import autoscale_levels
+from acdc.display_levels import autoscale_levels
 
 from .lut import ImageLutBar, SegmentationLutBar
 from . import tools
-from cellacdc.icons import LucideIcon, lucide_qicon
+from acdc.icons import LucideIcon, lucide_qicon
 
 
 class ImageCanvas(QWidget):
@@ -241,7 +241,7 @@ class ImageCanvas(QWidget):
         self._apply_layer_blend()
 
     def _apply_mask_lut(self) -> None:
-        from cellacdc.segmentation.lut import lut_with_hidden_labels
+        from acdc.segment.lut import lut_with_hidden_labels
 
         lut = lut_with_hidden_labels(self._seg_lut.current_lut(), self._hidden_label_ids)
         self._mask_item.setLookupTable(lut)
@@ -769,6 +769,7 @@ class SegmentationView(QMainWindow):
     label_visibility_changed = Signal()
     primary_secondary_blend_changed = Signal(int)
     image_seg_blend_changed = Signal(int)
+    closed = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -1076,3 +1077,7 @@ class SegmentationView(QMainWindow):
     @property
     def canvas(self) -> ImageCanvas:
         return self._canvas
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self.closed.emit()
+        super().closeEvent(event)

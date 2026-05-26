@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from cellacdc.icons import LucideIcon, lucide_qicon
-from cellacdc.app import get_qapp
+from acdc.icons import LucideIcon, lucide_qicon
+from acdc.app import get_qapp
 
 
 def test_lucide_qicon_returns_non_empty_icon() -> None:

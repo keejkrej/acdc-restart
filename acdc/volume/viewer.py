@@ -6,13 +6,13 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, ClassVar
 from weakref import WeakSet
 
-from cellacdc.app import get_qapp
-from cellacdc.data import ImageData, SegmentationResult
+from acdc.app import exec_until_closed, get_qapp
+from acdc.data import ImageData, SegmentationResult, coalesce_images
 
 if TYPE_CHECKING:
-    from cellacdc.volume.model import VolumeModel
-    from cellacdc.volume.presenter import VolumePresenter
-    from cellacdc.volume.view import VolumeView
+    from acdc.volume.model import VolumeModel
+    from acdc.volume.presenter import VolumePresenter
+    from acdc.volume.view import VolumeView
 
 _current_volume_viewer: VolumeViewer | None = None
 
@@ -24,9 +24,9 @@ class VolumeViewer:
 
     def __init__(self, *, show: bool = False) -> None:
         get_qapp()
-        from cellacdc.volume.model import VolumeModel
-        from cellacdc.volume.presenter import VolumePresenter
-        from cellacdc.volume.view import VolumeView
+        from acdc.volume.model import VolumeModel
+        from acdc.volume.presenter import VolumePresenter
+        from acdc.volume.view import VolumeView
 
         self._model = VolumeModel()
         self._view = VolumeView()
@@ -56,13 +56,19 @@ class VolumeViewer:
         return self._model.primary
 
     @property
+    def images(self) -> tuple[ImageData, ...]:
+        if self._model.primary is None:
+            return ()
+        return (self._model.primary, *self._model.overlay_channels)
+
+    @property
     def canvas(self):
         return self._view.canvas
 
     def open(
         self,
         images: Sequence[ImageData],
-        segmentation: SegmentationResult | None = None,
+        segmentation: SegmentationResult,
         *,
         t_index: int = 0,
     ) -> SegmentationResult:
@@ -82,17 +88,16 @@ def current_volume_viewer() -> VolumeViewer | None:
     return _current_volume_viewer
 
 
-def imshow(
+def volume(
     images: Sequence[ImageData],
-    segmentation: SegmentationResult | None = None,
+    segmentation: SegmentationResult,
     *,
-    viewer: VolumeViewer | None = None,
-    show: bool = True,
     t_index: int = 0,
-) -> tuple[VolumeViewer, SegmentationResult]:
-    """Open ``images`` in the 3D volume viewer and return ``(viewer, segmentation)``."""
-    viewer = viewer or VolumeViewer()
-    segmentation = viewer.open(images, segmentation, t_index=t_index)
-    if show:
-        viewer.show()
-    return viewer, segmentation
+) -> tuple[tuple[ImageData, ...], SegmentationResult]:
+    """Open the 3D volume viewer; block until the window closes."""
+    images = coalesce_images(images)
+    viewer = VolumeViewer()
+    viewer.open(images, segmentation, t_index=t_index)
+    viewer.show()
+    exec_until_closed(viewer.view)
+    return images, segmentation

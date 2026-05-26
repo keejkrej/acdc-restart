@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from qtpy.QtCore import Qt, Signal
-from qtpy.QtGui import QAction, QActionGroup
+from qtpy.QtGui import QAction, QActionGroup, QCloseEvent
 from qtpy.QtWidgets import (
     QDialog,
     QDockWidget,
@@ -17,11 +17,11 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from cellacdc.blend_controls import BlendControlBar
-from cellacdc.dialogs import pick_from_list, pick_many_from_list
-from cellacdc.icons import LucideIcon, lucide_qicon
-from cellacdc.segmentation.view import LabelListPanel
-from cellacdc.volume.canvas import VolumeCanvas
+from acdc.blend_controls import BlendControlBar
+from acdc.dialogs import pick_from_list, pick_many_from_list
+from acdc.icons import LucideIcon, lucide_qicon
+from acdc.segment.view import LabelListPanel
+from acdc.volume.canvas import VolumeCanvas
 
 
 class VolumeViewerFrame(QWidget):
@@ -122,6 +122,7 @@ class VolumeView(QMainWindow):
     t_index_changed = Signal(int)
     primary_secondary_blend_changed = Signal(int)
     image_seg_blend_changed = Signal(int)
+    closed = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -276,3 +277,7 @@ class VolumeView(QMainWindow):
     @property
     def canvas(self) -> VolumeCanvas:
         return self._canvas
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self.closed.emit()
+        super().closeEvent(event)

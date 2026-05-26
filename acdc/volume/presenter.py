@@ -8,18 +8,18 @@ from pathlib import Path
 import numpy as np
 from qtpy.QtWidgets import QMessageBox
 
-from cellacdc.data import ImageData, SegmentationResult
-from cellacdc.overlay import overlay_label, overlay_stack_array
-from cellacdc.segmentation import experiment
-from cellacdc.volume.model import VolumeModel
-from cellacdc.volume.prepare import (
+from acdc.data import ImageData, SegmentationResult
+from acdc.overlay import overlay_label, overlay_stack_array
+from acdc.segment import experiment
+from acdc.volume.model import VolumeModel
+from acdc.volume.prepare import (
     array_volume_zyx,
     label_volume_for_vispy,
     mask_volume_zyx,
     normalize_image_stack_volume,
     volume_zyx,
 )
-from cellacdc.volume.view import VolumeView
+from acdc.volume.view import VolumeView
 
 
 class VolumePresenter:

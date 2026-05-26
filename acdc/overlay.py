@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from cellacdc.data import ImageData
-from cellacdc.segmentation import experiment, io, tools
+from acdc.data import ImageData
+from acdc.segment import experiment, io, tools
 
 
 def list_sibling_channels(

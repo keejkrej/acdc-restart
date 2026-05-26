@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
-from cellacdc.segmentation import experiment, io, tools
-from cellacdc.segmentation.model import SegmentationModel
-from cellacdc.segmentation.tools import layout_from_metadata
+from acdc.segment import experiment, io, tools
+from acdc.segment.model import SegmentationModel
+from acdc.segment.tools import layout_from_metadata
 
 
 def _write_metadata(

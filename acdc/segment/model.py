@@ -11,7 +11,7 @@ import numpy as np
 from . import experiment, io, tools
 
 if TYPE_CHECKING:
-    from cellacdc.data import ImageData
+    from acdc.data import ImageData
 
 
 class SegmentationModel:
@@ -73,7 +73,7 @@ class SegmentationModel:
         result: SegmentationResult,
     ) -> None:
         """Bind in-memory image channel(s) and a live segmentation result."""
-        from cellacdc.data import coalesce_images
+        from acdc.data import coalesce_images
 
         image_list = coalesce_images(images)
         imaged = image_list[0]
@@ -225,7 +225,7 @@ class SegmentationModel:
     def current_secondary_slice(self) -> np.ndarray | None:
         if not self.overlay_channels or self.layout is None:
             return None
-        from cellacdc.overlay import overlay_slice_at
+        from acdc.overlay import overlay_slice_at
 
         return overlay_slice_at(
             self.overlay_channels,
@@ -238,7 +238,7 @@ class SegmentationModel:
         if self.image is None or self.layout is None:
             self.image_display_levels = None
             return
-        from cellacdc.display_levels import stack_autoscale_levels
+        from acdc.display_levels import stack_autoscale_levels
 
         self.image_display_levels = stack_autoscale_levels(self.image, self.layout)
 
@@ -246,8 +246,8 @@ class SegmentationModel:
         if not self.overlay_channels or self.layout is None:
             self.secondary_display_levels = None
             return
-        from cellacdc.display_levels import stack_autoscale_levels
-        from cellacdc.overlay import overlay_stack_array
+        from acdc.display_levels import stack_autoscale_levels
+        from acdc.overlay import overlay_stack_array
 
         overlay = overlay_stack_array(self.overlay_channels)
         self.secondary_display_levels = stack_autoscale_levels(overlay, self.layout)

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from cellacdc.data import ImageData, SegmentationResult
-from cellacdc.display_levels import autoscale_levels, scale_to_unit, stack_display_levels
-from cellacdc.segmentation import tools
+from acdc.data import ImageData, SegmentationResult
+from acdc.display_levels import autoscale_levels, scale_to_unit, stack_display_levels
+from acdc.segment import tools
 
 
 def array_volume_zyx(

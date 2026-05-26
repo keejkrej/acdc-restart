@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cellacdc.data import ImageData
-from cellacdc.segmentation import tools
-from cellacdc.volume.prepare import (
+from acdc.data import ImageData
+from acdc.segment import tools
+from acdc.volume.prepare import (
     label_volume_for_vispy,
     mask_volume_zyx,
     normalize_image_stack_volume,
@@ -32,7 +32,7 @@ def test_mask_volume_zyx_matches_image_layout() -> None:
     mask[1, 5, 5] = 2
     layout = tools.infer_layout(image.shape)
     imaged = ImageData(image=image, layout=layout)
-    from cellacdc.data import SegmentationResult
+    from acdc.data import SegmentationResult
 
     result = SegmentationResult(mask)
     lab = mask_volume_zyx(result, layout)
@@ -89,7 +89,7 @@ def test_volume_canvas_dual_volumes_use_opacity_blend() -> None:
     vispy.use(app="pyside6")
     from qtpy.QtWidgets import QApplication
 
-    from cellacdc.volume.canvas import VolumeCanvas
+    from acdc.volume.canvas import VolumeCanvas
 
     app = QApplication.instance() or QApplication([])
     canvas = VolumeCanvas()
@@ -120,7 +120,7 @@ def test_volume_canvas_uses_mip_for_image_channels() -> None:
     vispy.use(app="pyside6")
     from qtpy.QtWidgets import QApplication
 
-    from cellacdc.volume.canvas import VolumeCanvas
+    from acdc.volume.canvas import VolumeCanvas
 
     app = QApplication.instance() or QApplication([])
     canvas = VolumeCanvas()
@@ -133,7 +133,7 @@ def test_pg_colormap_to_vispy() -> None:
     pytest.importorskip("vispy")
     import pyqtgraph as pg
 
-    from cellacdc.volume.cmaps import label_lut_to_vispy, pg_colormap_to_vispy
+    from acdc.volume.cmaps import label_lut_to_vispy, pg_colormap_to_vispy
 
     lut_widget = pg.HistogramLUTWidget()
     lut_widget.item.gradient.loadPreset("grey")

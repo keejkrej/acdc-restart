@@ -6,13 +6,13 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, ClassVar
 from weakref import WeakSet
 
-from cellacdc.app import get_qapp
-from cellacdc.data import ImageData, SegmentationResult, coalesce_images, default_segmentation
+from acdc.app import exec_until_closed, get_qapp
+from acdc.data import ImageData, SegmentationResult, coalesce_images
 
 if TYPE_CHECKING:
-    from cellacdc.segmentation.model import SegmentationModel
-    from cellacdc.segmentation.presenter import SegmentationPresenter
-    from cellacdc.segmentation.view import SegmentationView
+    from acdc.segment.model import SegmentationModel
+    from acdc.segment.presenter import SegmentationPresenter
+    from acdc.segment.view import SegmentationView
 
 _current_viewer: SegmentationViewer | None = None
 
@@ -24,14 +24,15 @@ class SegmentationViewer:
 
     def __init__(self, *, show: bool = False) -> None:
         get_qapp()
-        from cellacdc.segmentation.model import SegmentationModel
-        from cellacdc.segmentation.presenter import SegmentationPresenter
-        from cellacdc.segmentation.view import SegmentationView
+        from acdc.segment.model import SegmentationModel
+        from acdc.segment.presenter import SegmentationPresenter
+        from acdc.segment.view import SegmentationView
 
         self._model = SegmentationModel()
         self._view = SegmentationView()
         self._presenter = SegmentationPresenter(self._model, self._view)
         self._result: SegmentationResult | None = None
+        self._images: tuple[ImageData, ...] = ()
         self._instances.add(self)
         if show:
             self.show()
@@ -52,17 +53,18 @@ class SegmentationViewer:
     def result(self) -> SegmentationResult | None:
         return self._result
 
+    @property
+    def images(self) -> tuple[ImageData, ...]:
+        return self._images
+
     def open(
         self,
         images: Sequence[ImageData],
-        segmentation: SegmentationResult | None = None,
+        segmentation: SegmentationResult,
     ) -> SegmentationResult:
         """Bind ``images`` channel(s) and a live ``segmentation`` mask to this viewer."""
         image_list = coalesce_images(images)
-        primary = image_list[0]
-        segmentation = (
-            segmentation if segmentation is not None else default_segmentation(primary)
-        )
+        self._images = image_list
         self._presenter.open(list(image_list), segmentation)
         self._result = segmentation
         return segmentation
@@ -83,16 +85,14 @@ def current_viewer() -> SegmentationViewer | None:
     return _current_viewer
 
 
-def imshow(
+def segment(
     images: Sequence[ImageData],
-    segmentation: SegmentationResult | None = None,
-    *,
-    viewer: SegmentationViewer | None = None,
-    show: bool = True,
-) -> tuple[SegmentationViewer, SegmentationResult]:
-    """Open ``images`` in the 2D segmentation viewer and return ``(viewer, segmentation)``."""
-    viewer = viewer or SegmentationViewer()
-    segmentation = viewer.open(images, segmentation)
-    if show:
-        viewer.show()
-    return viewer, segmentation
+    segmentation: SegmentationResult,
+) -> tuple[tuple[ImageData, ...], SegmentationResult]:
+    """Open the 2D segmentation editor; block until the window closes."""
+    images = coalesce_images(images)
+    viewer = SegmentationViewer()
+    viewer.open(images, segmentation)
+    viewer.show()
+    exec_until_closed(viewer.view)
+    return images, segmentation

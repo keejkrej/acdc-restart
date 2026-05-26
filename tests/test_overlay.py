@@ -8,16 +8,16 @@ import numpy as np
 import pytest
 import tifffile
 
-from cellacdc.data import ImageData, coalesce_images
-from cellacdc.overlay import (
+from acdc.data import ImageData, coalesce_images
+from acdc.overlay import (
     list_sibling_channels,
     load_channel_image,
     overlay_slice_at,
     overlay_stack_array,
 )
-from cellacdc.segmentation import io, tools
-from cellacdc.segmentation.model import SegmentationModel
-from cellacdc.volume.model import VolumeModel
+from acdc.segment import io, tools
+from acdc.segment.model import SegmentationModel
+from acdc.volume.model import VolumeModel
 from tests.test_experiment_io import _make_position, _write_metadata
 
 
@@ -58,7 +58,7 @@ def test_from_path_channels_and_overlay_composite(tmp_path: Path) -> None:
 def test_segmentation_model_multi_channel_open(tmp_path: Path) -> None:
     images = _make_position(tmp_path, "Position_1")
     channel_images = ImageData.from_path_channels(images, ["phase", "gfp"])
-    from cellacdc.data import SegmentationResult
+    from acdc.data import SegmentationResult
 
     result = SegmentationResult.empty_like(channel_images[0])
     model = SegmentationModel()

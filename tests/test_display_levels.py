@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from cellacdc.display_levels import autoscale_levels, scale_to_unit, stack_autoscale_levels
-from cellacdc.segmentation import tools
+from acdc.display_levels import autoscale_levels, scale_to_unit, stack_autoscale_levels
+from acdc.segment import tools
 
 
 def test_autoscale_levels_uses_min_max() -> None:
