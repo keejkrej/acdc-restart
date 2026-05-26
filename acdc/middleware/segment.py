@@ -6,19 +6,13 @@ from collections.abc import Callable, Sequence
 
 from acdc.data import ImageData, SegmentationResult, coalesce_images
 from acdc.middleware.context import AcdcContext
-from acdc.segment.viewer import run_segment
+from acdc.segment.viewer import run_segment as open_segment
 
 
-def segment(ctx: AcdcContext, next_: Callable[[], None]) -> None:
+def run_segment(ctx: AcdcContext, next_: Callable[[], None]) -> None:
     """Open the 2D editor; block until the window closes."""
-    ctx.images, _ = run_segment(ctx.images, ctx.segmentation)
+    ctx.images, _ = open_segment(ctx.images, ctx.segmentation)
     next_()
-
-
-def run(ctx: AcdcContext) -> AcdcContext:
-    """Run the segmentation viewer step and return ``ctx``."""
-    ctx.images, _ = run_segment(ctx.images, ctx.segmentation)
-    return ctx
 
 
 def from_arrays(

@@ -43,11 +43,11 @@ uv run acdc-3d     # 3D volume viewer
 Script pipelines use **`acdc.middleware`** — a Gin-style context passed through `(ctx, next)` middleware:
 
 ```python
-from acdc.middleware import AcdcContext, load, segment, use, volume
+from acdc.middleware import AcdcContext, load, run_segment, run_volume, use
 
 ctx = load("/path/to/experiment", channels=["phase", "gfp"])
 
-pipeline = use(segment, volume)
+pipeline = use(run_segment, run_volume)
 ctx = pipeline(ctx)
 
 ctx.segmentation.save()  # or downstream analysis on ctx.segmentation.mask
@@ -60,7 +60,7 @@ def normalize(ctx: AcdcContext, next_) -> None:
     # mutate ctx.images or ctx.segmentation in place
     next_()
 
-ctx = use(normalize, segment, volume)(ctx)
+ctx = use(normalize, run_segment, run_volume)(ctx)
 ```
 
 Run a single viewer step without composing:
@@ -69,7 +69,7 @@ Run a single viewer step without composing:
 from acdc.middleware import from_arrays, run_segment
 
 ctx = from_arrays(images, segmentation)
-ctx = run_segment(ctx)
+ctx = use(run_segment)(ctx)
 ```
 
 Build data yourself when you need full control:
@@ -80,14 +80,14 @@ from acdc.middleware import from_arrays, run_segment
 images = acdc.ImageData.from_path_channels("/path/to/experiment", ["phase", "gfp"])
 segmentation = acdc.SegmentationResult.empty_like(images[0])
 ctx = from_arrays(images, segmentation)
-ctx = run_segment(ctx)
+ctx = use(run_segment)(ctx)
 ```
 
 - **`AcdcContext`** — mutable pipeline state: `images`, `segmentation`, optional `t_index`, `meta`
 - **`load(...)`** — returns `AcdcContext`; loads mask from disk when present, otherwise new empty mask
 - **`use(m1, m2, ...)`** — compose middleware; returns `ctx -> ctx`
-- **`segment` / `volume`** — built-in viewer middleware (block until window closes)
-- **`run_segment` / `run_volume`** — run one viewer step on a context
+- **`run_segment` / `run_volume`** — built-in viewer middleware (block until window closes)
+- **`use(run_segment)(ctx)`** — run a single viewer step without composing a pipeline
 - **`ImageData` / `SegmentationResult`** — data types (`acdc.data`)
 - **`run()`** — only for CLI apps (`uv run acdc-seg` or `uv run acdc-3d`)
 
@@ -98,12 +98,12 @@ ctx = run_segment(ctx)
 ```
 acdc/
   __init__.py              # Types + viewer classes
-  middleware/              # Script pipeline API (AcdcContext, use, load, segment, volume)
+  middleware/              # Script pipeline API (AcdcContext, use, load, run_segment, run_volume)
   app.py                   # get_qapp, run
   data.py                  # ImageData + SegmentationResult + load_data
   segment/
     __main__.py            # acdc-seg CLI
-    viewer.py              # SegmentationViewer, segment
+    viewer.py              # SegmentationViewer, run_segment
     model.py               # Editing state (binds to SegmentationResult)
     view.py                # Qt / pyqtgraph UI
     presenter.py           # MVP wiring
@@ -111,7 +111,7 @@ acdc/
     io.py                  # Cell-ACDC mask format
     tools.py               # Brush math and stack helpers
   volume/
-    viewer.py              # VolumeViewer, volume (vispy)
+    viewer.py              # VolumeViewer, run_volume (vispy)
     __main__.py            # acdc-3d CLI
 ```
 

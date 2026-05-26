@@ -13,9 +13,8 @@ from acdc.middleware import (
     from_arrays,
     load,
     run_segment,
-    segment,
+    run_volume,
     use,
-    volume,
 )
 
 
@@ -64,7 +63,7 @@ def test_load_returns_context(tmp_path: Path) -> None:
     assert ctx.segmentation.mask.shape == ctx.images[0].image.shape
 
 
-def test_segment_middleware_blocks_until_close() -> None:
+def test_run_segment_middleware_blocks_until_close() -> None:
     imaged = ImageData.from_arrays(np.zeros((6, 6), dtype=np.uint8))
     ctx = from_arrays([imaged], SegmentationResult.empty_like(imaged))
 
@@ -76,27 +75,11 @@ def test_segment_middleware_blocks_until_close() -> None:
         viewer.view.close()
 
     QTimer.singleShot(0, close_window)
-    use(segment)(ctx)
+    use(run_segment)(ctx)
     assert ctx.images == (imaged,)
 
 
-def test_run_segment_step() -> None:
-    imaged = ImageData.from_arrays(np.zeros((6, 6), dtype=np.uint8))
-    ctx = from_arrays([imaged], SegmentationResult.empty_like(imaged))
-
-    def close_window() -> None:
-        from acdc.segment.viewer import current_viewer
-
-        viewer = current_viewer()
-        assert viewer is not None
-        viewer.view.close()
-
-    QTimer.singleShot(0, close_window)
-    run_segment(ctx)
-    assert ctx.images == (imaged,)
-
-
-def test_volume_middleware_blocks_until_close() -> None:
+def test_run_volume_middleware_blocks_until_close() -> None:
     imaged = ImageData.from_arrays(np.zeros((4, 8, 8), dtype=np.uint16))
     ctx = from_arrays([imaged], SegmentationResult.empty_like(imaged))
 
@@ -108,4 +91,4 @@ def test_volume_middleware_blocks_until_close() -> None:
         viewer.view.close()
 
     QTimer.singleShot(0, close_window)
-    use(volume)(ctx)
+    use(run_volume)(ctx)

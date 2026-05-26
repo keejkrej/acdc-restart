@@ -6,7 +6,6 @@ __all__ = [
     "SegmentationView",
     "SegmentationViewer",
     "current_viewer",
-    "segment",
 ]
 
 
@@ -23,7 +22,7 @@ def __getattr__(name: str):
         from .view import SegmentationView
 
         return SegmentationView
-    if name in {"SegmentationViewer", "current_viewer", "segment"}:
+    if name in {"SegmentationViewer", "current_viewer"}:
         from . import viewer as viewer_module
 
         return getattr(viewer_module, name)

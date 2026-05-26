@@ -118,10 +118,10 @@ def test_segmentation_viewer_open_binds_result() -> None:
     assert viewer.result is result
 
 
-def test_segment_returns_images_and_segmentation() -> None:
+def test_run_segment_returns_images_and_segmentation() -> None:
     from qtpy.QtCore import QTimer
 
-    from acdc.segment.viewer import current_viewer, segment
+    from acdc.segment.viewer import current_viewer, run_segment
 
     imaged = ImageData.from_arrays(np.zeros((6, 6), dtype=np.uint8))
     result = SegmentationResult.empty_like(imaged)
@@ -132,15 +132,15 @@ def test_segment_returns_images_and_segmentation() -> None:
         viewer.view.close()
 
     QTimer.singleShot(0, close_window)
-    out_images, opened = segment([imaged], result)
+    out_images, opened = run_segment([imaged], result)
     assert opened is result
     assert out_images == (imaged,)
 
 
-def test_volume_returns_images_and_segmentation() -> None:
+def test_run_volume_returns_images_and_segmentation() -> None:
     from qtpy.QtCore import QTimer
 
-    from acdc.volume.viewer import current_volume_viewer, volume
+    from acdc.volume.viewer import current_volume_viewer, run_volume
 
     image = np.zeros((4, 8, 8), dtype=np.uint16)
     imaged = ImageData.from_arrays(image)
@@ -152,7 +152,7 @@ def test_volume_returns_images_and_segmentation() -> None:
         viewer.view.close()
 
     QTimer.singleShot(0, close_window)
-    out_images, opened = volume([imaged], result)
+    out_images, opened = run_volume([imaged], result)
     assert opened is result
     assert out_images == (imaged,)
 

@@ -101,13 +101,3 @@ def run_volume(
     viewer.show()
     exec_until_closed(viewer.view)
     return images, segmentation
-
-
-def volume(
-    images: Sequence[ImageData],
-    segmentation: SegmentationResult,
-    *,
-    t_index: int = 0,
-) -> tuple[tuple[ImageData, ...], SegmentationResult]:
-    """Open the 3D volume viewer; block until the window closes."""
-    return run_volume(images, segmentation, t_index=t_index)
