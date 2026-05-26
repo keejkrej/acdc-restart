@@ -8,12 +8,12 @@ from cellacdc.display_levels import autoscale_levels, scale_to_unit, stack_autos
 from cellacdc.segmentation import tools
 
 
-def test_autoscale_levels_stretches_sparse_signal() -> None:
+def test_autoscale_levels_uses_min_max() -> None:
     data = np.zeros((16, 16), dtype=np.uint16)
     data[4:8, 4:8] = 500
     lo, hi = autoscale_levels(data)
-    assert lo < 500
-    assert hi >= 500
+    assert lo == 0.0
+    assert hi == 500.0
 
 
 def test_autoscale_levels_handles_flat_image() -> None:
@@ -22,15 +22,16 @@ def test_autoscale_levels_handles_flat_image() -> None:
     assert hi > lo
 
 
-def test_stack_autoscale_ignores_hot_outlier_frame() -> None:
+def test_stack_autoscale_uses_global_min_max() -> None:
     stack = np.zeros((8, 8, 8), dtype=np.uint16)
     stack[2, 1:7, 1:7] = 120
     stack[4, 4, 4] = 60000
     layout = tools.infer_layout(stack.shape)
     lo, hi = stack_autoscale_levels(stack, layout)
+    assert lo == 0.0
+    assert hi == 60000.0
     scaled = scale_to_unit(stack[2, 1:7, 1:7], lo, hi)
-    assert hi < 60000
-    assert scaled[0, 0] > 0.4
+    assert scaled[0, 0] == 120 / 60000
 
 
 def test_scale_to_unit_clips_outside_range() -> None:

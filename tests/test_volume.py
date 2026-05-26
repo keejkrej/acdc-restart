@@ -59,7 +59,7 @@ def test_normalize_image_stack_volume_uses_full_stack_levels() -> None:
     layout = tools.infer_layout(stack.shape)
     vol = stack[2]
     scaled, clim = normalize_image_stack_volume(vol, stack, layout)
-    assert scaled[2, 2] > 0.4
+    assert scaled[2, 2] == pytest.approx(100 / 60000)
     assert clim[1] > clim[0]
 
 
@@ -82,6 +82,99 @@ def test_label_volume_for_vispy_small_ids_use_tight_lut() -> None:
 def test_voxel_display_scale_matches_cell_acdc_ratio() -> None:
     assert voxel_display_scale(2.0, 1.0, 1.0) == (1.0, 1.0, 2.0)
     assert voxel_display_scale(1.0, 0.5, 0.5) == (1.0, 1.0, 2.0)
+
+
+def test_composite_display_volumes_crossfades_independently() -> None:
+    from cellacdc.volume.prepare import composite_display_volumes
+
+    primary = np.zeros((4, 4, 4), dtype=np.float32)
+    primary[1, 1, 1] = 1.0
+    secondary = np.zeros((4, 4, 4), dtype=np.float32)
+    secondary[2, 2, 2] = 1.0
+
+    all_primary = composite_display_volumes(
+        primary,
+        secondary,
+        primary_lo=0.0,
+        primary_hi=1.0,
+        secondary_lo=0.0,
+        secondary_hi=1.0,
+        primary_secondary_blend_0_to_100=0,
+    )
+    assert all_primary[1, 1, 1] == 1.0
+    assert all_primary[2, 2, 2] == 0.0
+
+    all_secondary = composite_display_volumes(
+        primary,
+        secondary,
+        primary_lo=0.0,
+        primary_hi=1.0,
+        secondary_lo=0.0,
+        secondary_hi=1.0,
+        primary_secondary_blend_0_to_100=100,
+    )
+    assert all_secondary[1, 1, 1] == 0.0
+    assert all_secondary[2, 2, 2] == 1.0
+
+    mixed = composite_display_volumes(
+        primary,
+        secondary,
+        primary_lo=0.0,
+        primary_hi=1.0,
+        secondary_lo=0.0,
+        secondary_hi=1.0,
+        primary_secondary_blend_0_to_100=50,
+    )
+    assert mixed[1, 1, 1] == 0.5
+    assert mixed[2, 2, 2] == 0.5
+
+
+def test_volume_canvas_composites_secondary_into_primary_volume() -> None:
+    pytest.importorskip("vispy")
+    import os
+
+    os.environ.setdefault("QT_API", "pyside6")
+    import vispy
+
+    vispy.use(app="pyside6")
+    from qtpy.QtWidgets import QApplication
+
+    from cellacdc.volume.canvas import VolumeCanvas
+
+    app = QApplication.instance() or QApplication([])
+    canvas = VolumeCanvas()
+    primary = np.zeros((8, 8, 8), dtype=np.float32)
+    primary[2, 2, 2] = 1.0
+    secondary = np.zeros((8, 8, 8), dtype=np.float32)
+    secondary[5, 5, 5] = 1.0
+    canvas.set_volumes(primary, None, label_lut_size=2, image_clim=(0.0, 1.0))
+    canvas.set_secondary_volume(secondary, clim=(0.0, 1.0))
+    canvas.set_primary_secondary_blend(100)
+
+    assert canvas._secondary_node is not None
+    assert canvas._secondary_node.visible is False
+    uploaded = canvas._image_node._last_data
+    assert uploaded[2, 2, 2] == 0.0
+    assert uploaded[5, 5, 5] == 1.0
+
+
+def test_volume_canvas_uses_mip_for_image_channels() -> None:
+    pytest.importorskip("vispy")
+    import os
+
+    os.environ.setdefault("QT_API", "pyside6")
+    import vispy
+
+    vispy.use(app="pyside6")
+    from qtpy.QtWidgets import QApplication
+
+    from cellacdc.volume.canvas import VolumeCanvas
+
+    app = QApplication.instance() or QApplication([])
+    canvas = VolumeCanvas()
+    canvas._ensure_vispy()
+    assert canvas._image_node.method == "mip"
+    assert canvas._label_node.method == "translucent"
 
 
 def test_pg_colormap_to_vispy() -> None:

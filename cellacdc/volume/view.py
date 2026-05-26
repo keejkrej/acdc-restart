@@ -215,7 +215,8 @@ class VolumeView(QMainWindow):
         return self._label_panel.get_hidden_label_ids()
 
     def set_label_list(self, label_ids: list[int], *, active_id: int) -> None:
-        self._label_panel.set_label_list(label_ids, active_id=active_id)
+        self._label_panel.set_label_list(label_ids)
+        self._label_panel.set_active_label(active_id)
 
     def set_active_label(self, label_id: int) -> None:
         self._label_panel.set_active_label(label_id)

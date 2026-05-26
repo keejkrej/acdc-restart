@@ -32,6 +32,7 @@ class SegmentationPresenter:
         v.redo_requested.connect(self._on_redo)
         v.tool_changed.connect(self._on_tool_changed)
         v.label_id_changed.connect(self._on_label_id_changed)
+        v.labels_selected.connect(self._on_labels_selected)
         v.brush_size_changed.connect(self._on_brush_size_changed)
         v.t_index_changed.connect(self._on_t_changed)
         v.z_index_changed.connect(self._on_z_changed)
@@ -227,6 +228,10 @@ class SegmentationPresenter:
     def _on_label_id_changed(self, label_id: int) -> None:
         self._model.label_id = label_id
 
+    def _on_labels_selected(self, label_ids: list[int]) -> None:
+        active_id = label_ids[0] if label_ids else self._model.label_id
+        self._apply_selection(label_ids, active_id=active_id)
+
     def _on_brush_size_changed(self, size: int) -> None:
         self._model.brush_size = size
 
@@ -252,7 +257,7 @@ class SegmentationPresenter:
         self._refresh_mask_only()
         self._view.set_label_list(
             self._model.all_label_ids(),
-            active_id=self._model.label_id,
+            selected_ids=self._selected_label_ids,
         )
 
     def _on_pick_at(self, y: int, x: int) -> None:
@@ -271,8 +276,11 @@ class SegmentationPresenter:
         self._selected_label_ids = list(label_ids)
         if label_ids:
             self._model.label_id = active_id
-            self._view.set_label_id(active_id)
-        self._view.set_label_selection(label_ids, active_id=active_id)
+            self._view.set_paint_label_id(active_id)
+        self._view.set_label_selection(
+            label_ids,
+            active_id=active_id if label_ids else None,
+        )
         self._refresh_selection()
 
     def _refresh_selection(self) -> None:
@@ -280,7 +288,7 @@ class SegmentationPresenter:
             return
         self._view.set_selection_overlay(
             self._selected_label_ids,
-            self._display_mask(),
+            self._model.current_mask_slice(),
         )
 
     def _sync_controls(self) -> None:
@@ -290,12 +298,9 @@ class SegmentationPresenter:
         t_max = max(0, layout.size_t - 1)
         z_max = max(0, layout.size_z - 1)
         self._view.set_navigation(self._model.t_index, t_max, self._model.z_index, z_max)
-        self._view.set_label_id(self._model.label_id)
+        self._view.set_paint_label_id(self._model.label_id)
         self._view.set_brush_size(self._model.brush_size)
-        self._view.set_label_list(
-            self._model.all_label_ids(),
-            active_id=self._model.label_id,
-        )
+        self._view.set_label_list(self._model.all_label_ids())
         label = self._model.status_label()
         dirty = " *" if self._model.dirty else ""
         self._view.set_status(f"{label}{dirty}")

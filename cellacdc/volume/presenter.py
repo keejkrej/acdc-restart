@@ -253,8 +253,8 @@ class VolumePresenter:
         t_max = max(0, layout.size_t - 1)
         self._view.canvas.set_primary_secondary_blend(self._model.primary_secondary_blend)
         self._view.canvas.set_image_seg_blend(self._model.image_seg_blend)
-        self._refresh_volume()
         self._refresh_secondary_volume()
+        self._refresh_volume()
         self._view.update_navigation_indices(self._model.t_index, t_max, 0, 0)
 
     def _refresh(self) -> None:

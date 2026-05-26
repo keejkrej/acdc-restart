@@ -7,21 +7,16 @@ import numpy as np
 from cellacdc.segmentation import tools
 
 
-def autoscale_levels(
-    data: np.ndarray,
-    *,
-    low_percentile: float = 2.0,
-    high_percentile: float = 98.0,
-) -> tuple[float, float]:
-    """Return ``(lo, hi)`` display levels for a grayscale slice or volume."""
+def autoscale_levels(data: np.ndarray) -> tuple[float, float]:
+    """Return ``(lo, hi)`` display levels using global min and max."""
     arr = np.asarray(data)
     if arr.size == 0:
         return 0.0, 1.0
     finite = arr[np.isfinite(arr)]
     if finite.size == 0:
         return 0.0, 1.0
-    lo = float(np.percentile(finite, low_percentile))
-    hi = float(np.percentile(finite, high_percentile))
+    lo = float(finite.min())
+    hi = float(finite.max())
     if hi <= lo:
         hi = lo + 1.0
     return lo, hi
@@ -30,17 +25,10 @@ def autoscale_levels(
 def stack_autoscale_levels(
     data: np.ndarray,
     layout: tools.StackLayout,
-    *,
-    low_percentile: float = 2.0,
-    high_percentile: float = 98.0,
 ) -> tuple[float, float]:
-    """Autoscale across every frame and Z slice in a stack."""
+    """Autoscale across every frame and Z slice in a stack (min/max)."""
     vol4 = tools.normalize_to_4d(data, layout)
-    return autoscale_levels(
-        vol4,
-        low_percentile=low_percentile,
-        high_percentile=high_percentile,
-    )
+    return autoscale_levels(vol4)
 
 
 def stack_display_levels(

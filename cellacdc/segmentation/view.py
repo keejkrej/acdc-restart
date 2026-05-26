@@ -616,6 +616,7 @@ class LabelListPanel(QWidget):
 
     label_id_changed = Signal(int)
     label_visibility_changed = Signal()
+    labels_selected = Signal(list)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -631,6 +632,7 @@ class LabelListPanel(QWidget):
         self._list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._list.itemChanged.connect(self._on_item_changed)
         self._list.currentItemChanged.connect(self._on_current_item_changed)
+        self._list.itemSelectionChanged.connect(self._on_item_selection_changed)
         layout.addWidget(self._list)
 
     def reset_visibility(self) -> None:
@@ -639,9 +641,16 @@ class LabelListPanel(QWidget):
     def get_hidden_label_ids(self) -> set[int]:
         return set(self._hidden_labels)
 
-    def set_label_list(self, label_ids: list[int], *, active_id: int) -> None:
+    def set_label_list(
+        self,
+        label_ids: list[int],
+        *,
+        selected_ids: list[int] | None = None,
+    ) -> None:
         self._all_label_ids = list(label_ids)
+        selected = set(selected_ids or [])
 
+        self._list.blockSignals(True)
         self._updating = True
         self._list.clear()
         for label_id in label_ids:
@@ -653,12 +662,35 @@ class LabelListPanel(QWidget):
             self._list.addItem(item)
         self._updating = False
 
-        self._select_label(active_id)
+        self._list.clearSelection()
+        for row in range(self._list.count()):
+            item = self._list.item(row)
+            if item is None:
+                continue
+            label = item.data(Qt.UserRole)
+            if label is not None and int(label) in selected:
+                item.setSelected(True)
+
+        if selected:
+            for row in range(self._list.count()):
+                item = self._list.item(row)
+                if item is not None and item.isSelected():
+                    self._list.setCurrentRow(row)
+                    break
+        else:
+            self._list.setCurrentRow(-1)
+
+        self._list.blockSignals(False)
 
     def set_active_label(self, label_id: int) -> None:
         self._select_label(label_id)
 
-    def set_selection_state(self, label_ids: list[int], *, active_id: int) -> None:
+    def set_selection_state(
+        self,
+        label_ids: list[int],
+        *,
+        active_id: int | None = None,
+    ) -> None:
         ids = set(label_ids)
         self._list.blockSignals(True)
         self._list.clearSelection()
@@ -669,8 +701,21 @@ class LabelListPanel(QWidget):
             label = item.data(Qt.UserRole)
             if label is not None and int(label) in ids:
                 item.setSelected(True)
-        self._select_label(active_id)
+        if active_id is not None:
+            self._select_label(active_id)
+        elif not label_ids:
+            self._list.setCurrentRow(-1)
         self._list.blockSignals(False)
+
+    def _on_item_selection_changed(self) -> None:
+        if self._updating:
+            return
+        label_ids: list[int] = []
+        for item in self._list.selectedItems():
+            label_id = item.data(Qt.UserRole)
+            if label_id is not None:
+                label_ids.append(int(label_id))
+        self.labels_selected.emit(sorted(label_ids))
 
     def _select_label(self, label_id: int) -> None:
         self._list.blockSignals(True)
@@ -717,6 +762,7 @@ class SegmentationView(QMainWindow):
     redo_requested = Signal()
     tool_changed = Signal(str)
     label_id_changed = Signal(int)
+    labels_selected = Signal(list)
     brush_size_changed = Signal(int)
     t_index_changed = Signal(int)
     z_index_changed = Signal(int)
@@ -879,6 +925,7 @@ class SegmentationView(QMainWindow):
     def _build_labels_dock(self) -> None:
         self._label_panel = LabelListPanel()
         self._label_panel.label_id_changed.connect(self.label_id_changed.emit)
+        self._label_panel.labels_selected.connect(self.labels_selected.emit)
         self._label_panel.label_visibility_changed.connect(
             self.label_visibility_changed.emit
         )
@@ -969,16 +1016,25 @@ class SegmentationView(QMainWindow):
     def set_status(self, text: str) -> None:
         self.statusBar().showMessage(text)
 
-    def set_label_id(self, label_id: int) -> None:
+    def set_paint_label_id(self, label_id: int) -> None:
         self._label_spin.blockSignals(True)
         self._label_spin.setValue(label_id)
         self._label_spin.blockSignals(False)
-        self._label_panel.set_active_label(label_id)
 
-    def set_label_list(self, label_ids: list[int], *, active_id: int) -> None:
-        self._label_panel.set_label_list(label_ids, active_id=active_id)
+    def set_label_list(
+        self,
+        label_ids: list[int],
+        *,
+        selected_ids: list[int] | None = None,
+    ) -> None:
+        self._label_panel.set_label_list(label_ids, selected_ids=selected_ids)
 
-    def set_label_selection(self, label_ids: list[int], *, active_id: int) -> None:
+    def set_label_selection(
+        self,
+        label_ids: list[int],
+        *,
+        active_id: int | None = None,
+    ) -> None:
         self._label_panel.set_selection_state(label_ids, active_id=active_id)
 
     def set_selection_overlay(self, label_ids: list[int], mask_slice: np.ndarray) -> None:
