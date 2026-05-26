@@ -11,6 +11,7 @@ from cellacdc.data import ImagedData, SegmentationResult
 from cellacdc.segmentation import experiment
 from cellacdc.volume.model import VolumeModel
 from cellacdc.volume.prepare import (
+    array_volume_zyx,
     label_volume_for_vispy,
     mask_volume_zyx,
     normalize_image_volume,
@@ -34,6 +35,10 @@ class VolumePresenter:
         v.label_id_changed.connect(self._on_label_id_changed)
         v.label_visibility_changed.connect(self._on_label_visibility_changed)
         v.t_index_changed.connect(self._on_t_changed)
+        v.add_fluorescence_requested.connect(self._on_add_fluorescence)
+        v.remove_fluorescence_requested.connect(self._on_remove_fluorescence)
+        v.bf_fluor_blend_changed.connect(self._on_bf_fluor_blend_changed)
+        v.image_seg_blend_changed.connect(self._on_image_seg_blend_changed)
 
     def run(self) -> None:
         self._view.show()
@@ -51,6 +56,71 @@ class VolumePresenter:
         self._sync_controls()
         self._refresh()
         return mask
+
+    def _on_add_fluorescence(self) -> None:
+        if not self._model.has_data:
+            return
+        if self._model.imaged is None or self._model.imaged.images_path is None:
+            QMessageBox.information(
+                self._view,
+                "No channels",
+                "Fluorescence overlay requires a Cell-ACDC Images folder.",
+            )
+            return
+        channels = self._model.fluorescence_sibling_channels()
+        if not channels:
+            QMessageBox.information(
+                self._view,
+                "No channels",
+                "No other fluorescence channels are available in this Images folder.",
+            )
+            return
+        channel = self._view.ask_pick_overlay_channel(channels)
+        if not channel:
+            return
+        try:
+            self._model.load_fluorescence_channel(channel)
+        except Exception as exc:
+            QMessageBox.critical(self._view, "Overlay failed", str(exc))
+            return
+        self._refresh_fluorescence_volume()
+        self._sync_fluorescence_ui()
+        self._sync_blend_ui()
+
+    def _on_remove_fluorescence(self) -> None:
+        self._model.clear_fluorescence()
+        self._view.canvas.clear_fluorescence_volume()
+        self._sync_fluorescence_ui()
+        self._sync_blend_ui()
+
+    def _on_bf_fluor_blend_changed(self, value: int) -> None:
+        self._model.set_bf_fluor_blend(value)
+        self._view.canvas.set_bf_fluor_blend(value)
+
+    def _on_image_seg_blend_changed(self, value: int) -> None:
+        self._model.set_image_seg_blend(value)
+        self._view.canvas.set_image_seg_blend(value)
+
+    def _sync_fluorescence_ui(self) -> None:
+        fluo = self._model.fluorescence
+        can_add = (
+            self._model.imaged is not None and self._model.imaged.images_path is not None
+        )
+        self._view.set_fluorescence_ui(
+            can_add=can_add,
+            active=fluo is not None,
+            channel_name=fluo.channel_name if fluo is not None else "",
+        )
+
+    def _sync_blend_ui(self) -> None:
+        fluo = self._model.fluorescence
+        self._view.set_blend_ui(
+            visible=self._model.has_data,
+            bf_fluor=int(round(self._model.bf_fluor_blend)),
+            image_seg=int(round(self._model.image_seg_blend)),
+            show_bf_fluor=fluo is not None,
+            channel_name=fluo.channel_name if fluo is not None else "",
+        )
 
     def _on_open_folder(self) -> None:
         path = self._view.ask_open_folder_path()
@@ -153,12 +223,25 @@ class VolumePresenter:
         )
         self._view.refresh_label_visibility()
 
+    def _refresh_fluorescence_volume(self) -> None:
+        fluo = self._model.fluorescence
+        if not self._model.has_data or self._model.imaged is None or fluo is None:
+            self._view.canvas.clear_fluorescence_volume()
+            return
+        imaged = self._model.imaged
+        fluo_raw = array_volume_zyx(fluo.image, imaged.layout, t_index=self._model.t_index)
+        fluo_vol, _clim = normalize_image_volume(fluo_raw)
+        self._view.canvas.set_fluorescence_volume(fluo_vol)
+
     def _refresh_view(self) -> None:
         if not self._model.has_data or self._model.imaged is None:
             return
         layout = self._model.imaged.layout
         t_max = max(0, layout.size_t - 1)
+        self._view.canvas.set_bf_fluor_blend(self._model.bf_fluor_blend)
+        self._view.canvas.set_image_seg_blend(self._model.image_seg_blend)
         self._refresh_volume()
+        self._refresh_fluorescence_volume()
         self._view.update_navigation_indices(self._model.t_index, t_max, 0, 0)
 
     def _refresh(self) -> None:
@@ -169,3 +252,5 @@ class VolumePresenter:
             self._view.setWindowTitle(f"Cell-ACDC — 3D Volume — {title}")
         self._refresh_view()
         self._sync_controls()
+        self._sync_fluorescence_ui()
+        self._sync_blend_ui()

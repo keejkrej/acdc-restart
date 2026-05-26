@@ -6,7 +6,6 @@ from qtpy.QtCore import Qt, Signal
 from qtpy.QtGui import QAction, QActionGroup
 from qtpy.QtWidgets import (
     QDialog,
-    QDialogButtonBox,
     QDockWidget,
     QHBoxLayout,
     QLabel,
@@ -18,16 +17,19 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from cellacdc.blend_controls import BlendControlBar
+from cellacdc.dialogs import pick_from_list
 from cellacdc.icons import LucideIcon, lucide_qicon
 from cellacdc.segmentation.view import LabelListPanel
 from cellacdc.volume.canvas import VolumeCanvas
 
 
 class VolumeViewerFrame(QWidget):
-    """Volume canvas with bottom blend and frame controls (no Z-slice scrub)."""
+    """Volume canvas with crossfade and frame controls (no Z-slice scrub)."""
 
     t_index_changed = Signal(int)
-    blend_changed = Signal(int)
+    bf_fluor_blend_changed = Signal(int)
+    image_seg_blend_changed = Signal(int)
 
     def __init__(self, canvas: VolumeCanvas, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,26 +41,19 @@ class VolumeViewerFrame(QWidget):
 
         bottom = QWidget()
         bottom_layout = QVBoxLayout(bottom)
-        bottom_layout.setContentsMargins(8, 4, 8, 4)
-        bottom_layout.setSpacing(2)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(0)
 
-        self._blend_row = QWidget()
-        blend_layout = QHBoxLayout(self._blend_row)
-        blend_layout.setContentsMargins(0, 0, 0, 0)
-        blend_layout.addWidget(QLabel("Image ↔ Segmentation:"))
-        self._blend_slider = QSlider(Qt.Horizontal)
-        self._blend_slider.setRange(0, 100)
-        self._blend_slider.setValue(50)
-        self._blend_slider.valueChanged.connect(self._on_blend_changed)
-        blend_layout.addWidget(self._blend_slider, stretch=1)
-        self._blend_label = QLabel("50%")
-        self._blend_label.setMinimumWidth(48)
-        blend_layout.addWidget(self._blend_label)
-        bottom_layout.addWidget(self._blend_row)
+        self._blend_bar = BlendControlBar()
+        self._blend_bar.bf_fluor_changed.connect(self.bf_fluor_blend_changed.emit)
+        self._blend_bar.image_seg_changed.connect(self.image_seg_blend_changed.emit)
+        self._blend_bar.bf_fluor_changed.connect(self._on_bf_fluor_changed)
+        self._blend_bar.image_seg_changed.connect(self._on_image_seg_changed)
+        bottom_layout.addWidget(self._blend_bar)
 
         self._frame_row = QWidget()
         frame_layout = QHBoxLayout(self._frame_row)
-        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setContentsMargins(8, 4, 8, 4)
         frame_layout.addWidget(QLabel("Frame:"))
         self._t_slider = QSlider(Qt.Horizontal)
         self._t_slider.valueChanged.connect(self.t_index_changed.emit)
@@ -70,12 +65,35 @@ class VolumeViewerFrame(QWidget):
         self._frame_row.setVisible(False)
 
         layout.addWidget(bottom)
-        self.canvas.set_blend(self._blend_slider.value())
+        self._on_image_seg_changed(50)
+        self._on_bf_fluor_changed(50)
+        self._blend_bar.setVisible(False)
 
-    def _on_blend_changed(self, value: int) -> None:
-        self._blend_label.setText(f"{value}%")
-        self.canvas.set_blend(value)
-        self.blend_changed.emit(value)
+    def _on_image_seg_changed(self, value: int) -> None:
+        self.canvas.set_image_seg_blend(value)
+
+    def _on_bf_fluor_changed(self, value: int) -> None:
+        self.canvas.set_bf_fluor_blend(value)
+
+    def set_blend_controls(
+        self,
+        *,
+        visible: bool,
+        bf_fluor: int,
+        image_seg: int,
+        show_bf_fluor: bool,
+        channel_name: str = "",
+    ) -> None:
+        self._blend_bar.setVisible(visible)
+        if visible:
+            self._blend_bar.set_values(
+                bf_fluor=bf_fluor,
+                image_seg=image_seg,
+                show_bf_fluor=show_bf_fluor,
+                channel_name=channel_name,
+            )
+            self.canvas.set_bf_fluor_blend(bf_fluor)
+            self.canvas.set_image_seg_blend(image_seg)
 
     def set_navigation(self, t: int, t_max: int, z: int, z_max: int) -> None:
         del z, z_max
@@ -102,7 +120,10 @@ class VolumeView(QMainWindow):
     label_id_changed = Signal(int)
     label_visibility_changed = Signal()
     t_index_changed = Signal(int)
-    blend_changed = Signal(int)
+    bf_fluor_blend_changed = Signal(int)
+    image_seg_blend_changed = Signal(int)
+    add_fluorescence_requested = Signal()
+    remove_fluorescence_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -110,7 +131,8 @@ class VolumeView(QMainWindow):
         self._canvas = VolumeCanvas()
         self._viewer = VolumeViewerFrame(self._canvas)
         self._viewer.t_index_changed.connect(self.t_index_changed.emit)
-        self._viewer.blend_changed.connect(self.blend_changed.emit)
+        self._viewer.bf_fluor_blend_changed.connect(self.bf_fluor_blend_changed.emit)
+        self._viewer.image_seg_blend_changed.connect(self.image_seg_blend_changed.emit)
         self.setCentralWidget(self._viewer)
         self._build_actions()
         self._build_menu()
@@ -129,6 +151,12 @@ class VolumeView(QMainWindow):
         self._open_file_act.setIcon(lucide_qicon(LucideIcon.FILE_IMAGE))
         self._open_file_act.triggered.connect(self.open_image_file_requested.emit)
 
+        self._add_fluo_act = QAction("Add fluorescence channel…", self)
+        self._add_fluo_act.triggered.connect(self.add_fluorescence_requested.emit)
+        self._remove_fluo_act = QAction("Remove fluorescence channel", self)
+        self._remove_fluo_act.setEnabled(False)
+        self._remove_fluo_act.triggered.connect(self.remove_fluorescence_requested.emit)
+
         self._hand_act = QAction("Hand", self)
         self._hand_act.setIcon(lucide_qicon(LucideIcon.HAND))
         self._hand_act.setCheckable(True)
@@ -144,6 +172,9 @@ class VolumeView(QMainWindow):
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self._open_folder_act)
         file_menu.addAction(self._open_file_act)
+        file_menu.addSeparator()
+        file_menu.addAction(self._add_fluo_act)
+        file_menu.addAction(self._remove_fluo_act)
         file_menu.addSeparator()
         quit_act = QAction("&Quit", self)
         quit_act.setShortcut("Ctrl+Q")
@@ -167,7 +198,9 @@ class VolumeView(QMainWindow):
         dock = QDockWidget("Labels", self)
         dock.setWidget(self._label_panel)
         dock.setFeatures(
-            QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable
+            QDockWidget.DockWidgetClosable
+            | QDockWidget.DockWidgetMovable
+            | QDockWidget.DockWidgetFloatable
         )
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
 
@@ -198,6 +231,33 @@ class VolumeView(QMainWindow):
     def set_status(self, text: str) -> None:
         self.statusBar().showMessage(text)
 
+    def set_fluorescence_ui(
+        self,
+        *,
+        can_add: bool,
+        active: bool,
+        channel_name: str = "",
+    ) -> None:
+        self._add_fluo_act.setEnabled(can_add)
+        self._remove_fluo_act.setEnabled(active)
+
+    def set_blend_ui(
+        self,
+        *,
+        visible: bool,
+        bf_fluor: int,
+        image_seg: int,
+        show_bf_fluor: bool,
+        channel_name: str = "",
+    ) -> None:
+        self._viewer.set_blend_controls(
+            visible=visible,
+            bf_fluor=bf_fluor,
+            image_seg=image_seg,
+            show_bf_fluor=show_bf_fluor,
+            channel_name=channel_name,
+        )
+
     def ask_open_folder_path(self) -> str | None:
         from qtpy.QtWidgets import QFileDialog
 
@@ -227,28 +287,13 @@ class VolumeView(QMainWindow):
             return None
         if len(names) == 1:
             return names[0]
-        return self._pick_from_list("Select channel", names)
+        return pick_from_list(self, "Select channel", names)
+
+    def ask_pick_overlay_channel(self, names: list[str]) -> str | None:
+        return pick_from_list(self, "Select fluorescence channel", names)
 
     def _pick_from_list(self, title: str, names: list[str]) -> str | None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle(title)
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel(f"{title}:"))
-        list_widget = QListWidget()
-        list_widget.addItems(names)
-        list_widget.setCurrentRow(0)
-        layout.addWidget(list_widget)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
-            parent=dialog,
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        if dialog.exec() != QDialog.Accepted:
-            return None
-        selected = list_widget.currentItem()
-        return selected.text() if selected is not None else None
+        return pick_from_list(self, title, names)
 
     @property
     def canvas(self) -> VolumeCanvas:

@@ -18,6 +18,15 @@ class VolumeImageLutBar(BaseLutBar):
         self.setLevels(0, 1)
 
 
+class VolumeFluorescenceLutBar(BaseLutBar):
+    """Fluorescence overlay LUT for the 3D viewer."""
+
+    def __init__(self, *, axis_label: str = "Fluo") -> None:
+        super().__init__(axis_label=axis_label, gradient_position="right")
+        self.gradient.loadPreset("yellowy")
+        self.setLevels(0, 1)
+
+
 class VolumeLabelLutBar(BaseLutBar):
     """Right LUT bar driving the vispy label overlay colormap."""
 

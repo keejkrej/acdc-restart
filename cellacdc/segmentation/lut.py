@@ -53,6 +53,15 @@ class ImageLutBar(BaseLutBar):
         self.setImageItem(image_item)
 
 
+class FluorescenceLutBar(BaseLutBar):
+    """LUT bar for an optional fluorescence overlay channel."""
+
+    def __init__(self, image_item: pg.ImageItem, *, axis_label: str = "Fluo") -> None:
+        super().__init__(axis_label=axis_label, gradient_position="right")
+        self.gradient.loadPreset("yellowy")
+        self.setImageItem(image_item)
+
+
 class SegmentationLutBar(BaseLutBar):
     """Right LUT bar controlling the label overlay colormap."""
 

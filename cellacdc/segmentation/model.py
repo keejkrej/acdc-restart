@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from cellacdc.overlay import FluorescenceOverlay
+
 from . import experiment, io, tools
 
 if TYPE_CHECKING:
@@ -39,6 +41,9 @@ class SegmentationModel:
         self._stroke_snapshot: np.ndarray | None = None
         self._last_paint_y: int | None = None
         self._last_paint_x: int | None = None
+        self.fluorescence: FluorescenceOverlay | None = None
+        self.bf_fluor_blend = 50.0
+        self.image_seg_blend = 50.0
 
     @property
     def dirty(self) -> bool:
@@ -81,6 +86,7 @@ class SegmentationModel:
         self.title = imaged.title
         self.t_index = 0
         self.z_index = 0
+        self.fluorescence = None
         self.dirty = False
         self._clear_history()
 
@@ -126,6 +132,7 @@ class SegmentationModel:
         self.title = title
         self.t_index = 0
         self.z_index = 0
+        self.fluorescence = None
         self.dirty = False
         self._clear_history()
 
@@ -202,6 +209,39 @@ class SegmentationModel:
     def current_mask_slice(self) -> np.ndarray:
         assert self.mask is not None and self.layout is not None
         return tools.extract_slice(self.mask, self.layout, self.t_index, self.z_index)
+
+    def current_fluorescence_slice(self) -> np.ndarray | None:
+        if self.fluorescence is None or self.layout is None:
+            return None
+        return self.fluorescence.slice_at(self.layout, self.t_index, self.z_index)
+
+    def fluorescence_sibling_channels(self) -> list[str]:
+        if self.images_path is None:
+            return []
+        from cellacdc.overlay import list_sibling_channels
+
+        return list_sibling_channels(self.images_path, exclude=self.channel_name)
+
+    def load_fluorescence_channel(self, channel_name: str) -> None:
+        if not self.images_path or self.layout is None:
+            raise ValueError("Fluorescence overlay requires a Cell-ACDC Images folder")
+        from cellacdc.overlay import load_channel_image
+
+        image = load_channel_image(
+            self.images_path,
+            channel_name,
+            layout=self.layout,
+        )
+        self.fluorescence = FluorescenceOverlay(channel_name, image)
+
+    def clear_fluorescence(self) -> None:
+        self.fluorescence = None
+
+    def set_bf_fluor_blend(self, value_0_to_100: float) -> None:
+        self.bf_fluor_blend = max(0.0, min(100.0, float(value_0_to_100)))
+
+    def set_image_seg_blend(self, value_0_to_100: float) -> None:
+        self.image_seg_blend = max(0.0, min(100.0, float(value_0_to_100)))
 
     def current_label_ids(self) -> list[int]:
         """Return sorted unique label IDs on the current slice (excluding background)."""

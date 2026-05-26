@@ -7,8 +7,9 @@ import pyqtgraph as pg
 from qtpy.QtCore import Qt, QTimer
 from qtpy.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
+from cellacdc.blend import layer_opacities
 from cellacdc.volume.cmaps import label_lut_to_vispy, pg_colormap_to_vispy
-from cellacdc.volume.lut import VolumeImageLutBar, VolumeLabelLutBar
+from cellacdc.volume.lut import VolumeFluorescenceLutBar, VolumeImageLutBar, VolumeLabelLutBar
 from cellacdc.volume.prepare import voxel_display_scale
 
 
@@ -37,7 +38,10 @@ class VolumeCanvas(QWidget):
         self._view = None
         self._image_node = None
         self._label_node = None
-        self._blend = 0.5
+        self._fluo_node = None
+        self._bf_fluor_blend = 50.0
+        self._image_seg_blend = 50.0
+        self._has_fluorescence = False
         self._voxel_dz = 1.0
         self._voxel_dy = 1.0
         self._voxel_dx = 1.0
@@ -50,24 +54,41 @@ class VolumeCanvas(QWidget):
 
         self._image_lut = VolumeImageLutBar()
         self._image_lut.gradient.sigGradientChanged.connect(self._on_image_lut_changed)
+        self._fluo_lut = VolumeFluorescenceLutBar()
+        self._fluo_lut.gradient.sigGradientChanged.connect(self._on_fluo_lut_changed)
         self._label_lut = VolumeLabelLutBar()
         self._label_lut.gradient.sigGradientChanged.connect(self._on_label_lut_changed)
 
-        self._left_lut = _LutColumn(self._image_lut)
+        self._left_stack = QWidget()
+        left_layout = QVBoxLayout(self._left_stack)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+        self._image_lut_column = _LutColumn(self._image_lut)
+        self._fluo_lut_column = _LutColumn(self._fluo_lut)
+        self._fluo_lut_column.setVisible(False)
+        left_layout.addWidget(self._image_lut_column, stretch=1)
+        left_layout.addWidget(self._fluo_lut_column, stretch=1)
+        self._left_stack.setMinimumWidth(95)
+        self._left_stack.setMaximumWidth(115)
+
         self._canvas_host = QWidget()
         self._canvas_host.setMinimumSize(480, 360)
         self._canvas_host.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._right_lut = _LutColumn(self._label_lut)
 
-        layout.addWidget(self._left_lut)
+        layout.addWidget(self._left_stack)
         layout.addWidget(self._canvas_host, stretch=1)
         layout.addWidget(self._right_lut)
 
         self._ensure_vispy()
 
-    def set_blend(self, value_0_to_100: int) -> None:
-        self._blend = max(0.0, min(100.0, float(value_0_to_100))) / 100.0
-        self._apply_blend()
+    def set_bf_fluor_blend(self, value_0_to_100: int) -> None:
+        self._bf_fluor_blend = max(0.0, min(100.0, float(value_0_to_100)))
+        self._apply_layer_blend()
+
+    def set_image_seg_blend(self, value_0_to_100: int) -> None:
+        self._image_seg_blend = max(0.0, min(100.0, float(value_0_to_100)))
+        self._apply_layer_blend()
 
     def set_voxel_sizes(self, dz: float, dy: float, dx: float) -> None:
         """Apply physical voxel sizes from metadata (Cell-ACDC ``PhysicalSize*``)."""
@@ -103,8 +124,32 @@ class VolumeCanvas(QWidget):
             self._label_node.visible = False
 
         self._apply_voxel_scale()
-        self._apply_blend()
+        self._apply_layer_blend()
         self._canvas.update()
+
+    def set_fluorescence_volume(self, volume: np.ndarray) -> None:
+        self._ensure_vispy()
+        assert self._fluo_node is not None
+        assert self._canvas is not None
+
+        self._fluo_node.set_data(np.ascontiguousarray(volume, dtype=np.float32))
+        self._apply_fluorescence_style()
+        self._fluo_node.visible = True
+        self._has_fluorescence = True
+        self._fluo_lut_column.setVisible(True)
+        self._apply_voxel_scale(self._fluo_node)
+        self._apply_layer_blend()
+        self._schedule_fit_camera()
+        self._canvas.update()
+
+    def clear_fluorescence_volume(self) -> None:
+        if self._fluo_node is not None:
+            self._fluo_node.visible = False
+        self._has_fluorescence = False
+        self._fluo_lut_column.setVisible(False)
+        self._apply_layer_blend()
+        if self._canvas is not None:
+            self._canvas.update()
 
     def set_hidden_labels(self, hidden_ids: set[int]) -> None:
         """Toggle label visibility via LUT alpha (no volume re-upload)."""
@@ -161,6 +206,11 @@ class VolumeCanvas(QWidget):
             parent=self._view.scene,
         )
         self._label_node.visible = False
+        self._fluo_node = visuals.Volume(
+            np.zeros((2, 2, 2), dtype=np.float32),
+            parent=self._view.scene,
+        )
+        self._fluo_node.visible = False
         gloo.set_state(blend=True, depth_test=False)
         self._vispy_ready = True
 
@@ -185,7 +235,10 @@ class VolumeCanvas(QWidget):
 
         scale = voxel_display_scale(self._voxel_dz, self._voxel_dy, self._voxel_dx)
         transform = STTransform(scale=scale)
-        targets = [node] if node is not None else [self._image_node, self._label_node]
+        if node is not None:
+            targets = [node]
+        else:
+            targets = [self._image_node, self._label_node, self._fluo_node]
         for target in targets:
             if target is not None:
                 target.transform = transform
@@ -204,12 +257,23 @@ class VolumeCanvas(QWidget):
         n = float(self._label_lut.lut_size)
         self._label_node.clim = (-0.5, n - 0.5)
 
-    def _apply_blend(self) -> None:
-        t = self._blend
+    def _apply_fluorescence_style(self) -> None:
+        assert self._fluo_node is not None
+        self._fluo_node.cmap = pg_colormap_to_vispy(self._fluo_lut.gradient.colorMap())
+        self._fluo_node.clim = (0.0, 1.0)
+
+    def _apply_layer_blend(self) -> None:
+        bf_opacity, fluo_opacity, seg_opacity = layer_opacities(
+            self._bf_fluor_blend,
+            self._image_seg_blend,
+            has_fluorescence=self._has_fluorescence,
+        )
         if self._image_node is not None:
-            self._image_node.opacity = 1.0 - t
+            self._image_node.opacity = bf_opacity
+        if self._fluo_node is not None and self._fluo_node.visible:
+            self._fluo_node.opacity = fluo_opacity
         if self._label_node is not None and self._label_node.visible:
-            self._label_node.opacity = t
+            self._label_node.opacity = seg_opacity
         if self._canvas is not None:
             self._canvas.update()
 
@@ -222,6 +286,12 @@ class VolumeCanvas(QWidget):
     def _on_label_lut_changed(self) -> None:
         if self._label_node is not None and self._label_node.visible:
             self._apply_label_style()
+            if self._canvas is not None:
+                self._canvas.update()
+
+    def _on_fluo_lut_changed(self) -> None:
+        if self._fluo_node is not None and self._fluo_node.visible:
+            self._apply_fluorescence_style()
             if self._canvas is not None:
                 self._canvas.update()
 

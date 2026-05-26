@@ -36,6 +36,10 @@ class SegmentationPresenter:
         v.t_index_changed.connect(self._on_t_changed)
         v.z_index_changed.connect(self._on_z_changed)
         v.label_visibility_changed.connect(self._on_label_visibility_changed)
+        v.add_fluorescence_requested.connect(self._on_add_fluorescence)
+        v.remove_fluorescence_requested.connect(self._on_remove_fluorescence)
+        v.bf_fluor_blend_changed.connect(self._on_bf_fluor_blend_changed)
+        v.image_seg_blend_changed.connect(self._on_image_seg_blend_changed)
 
         c = v.canvas
         c.paint_at.connect(self._on_paint_at)
@@ -54,6 +58,69 @@ class SegmentationPresenter:
         self._selected_label_ids = []
         self._sync_controls()
         self._refresh()
+
+    def _on_add_fluorescence(self) -> None:
+        if not self._model.has_data:
+            return
+        if self._model.images_path is None:
+            QMessageBox.information(
+                self._view,
+                "No channels",
+                "Fluorescence overlay requires a Cell-ACDC Images folder.",
+            )
+            return
+        channels = self._model.fluorescence_sibling_channels()
+        if not channels:
+            QMessageBox.information(
+                self._view,
+                "No channels",
+                "No other fluorescence channels are available in this Images folder.",
+            )
+            return
+        channel = self._view.ask_pick_overlay_channel(channels)
+        if not channel:
+            return
+        try:
+            self._model.load_fluorescence_channel(channel)
+        except Exception as exc:
+            QMessageBox.critical(self._view, "Overlay failed", str(exc))
+            return
+        self._refresh_view()
+        self._sync_fluorescence_ui()
+        self._sync_blend_ui()
+
+    def _on_remove_fluorescence(self) -> None:
+        self._model.clear_fluorescence()
+        self._refresh_view()
+        self._sync_fluorescence_ui()
+        self._sync_blend_ui()
+
+    def _on_bf_fluor_blend_changed(self, value: int) -> None:
+        self._model.set_bf_fluor_blend(value)
+        self._view.canvas.set_bf_fluor_blend(value)
+
+    def _on_image_seg_blend_changed(self, value: int) -> None:
+        self._model.set_image_seg_blend(value)
+        self._view.canvas.set_image_seg_blend(value)
+
+    def _sync_fluorescence_ui(self) -> None:
+        fluo = self._model.fluorescence
+        can_add = self._model.images_path is not None
+        self._view.set_fluorescence_ui(
+            can_add=can_add,
+            active=fluo is not None,
+            channel_name=fluo.channel_name if fluo is not None else "",
+        )
+
+    def _sync_blend_ui(self) -> None:
+        fluo = self._model.fluorescence
+        self._view.set_blend_ui(
+            visible=self._model.has_data,
+            bf_fluor=int(round(self._model.bf_fluor_blend)),
+            image_seg=int(round(self._model.image_seg_blend)),
+            show_bf_fluor=fluo is not None,
+            channel_name=fluo.channel_name if fluo is not None else "",
+        )
 
     def _on_open_folder(self) -> None:
         path = self._view.ask_open_folder_path()
@@ -246,9 +313,12 @@ class SegmentationPresenter:
         assert layout is not None
         t_max = max(0, layout.size_t - 1)
         z_max = max(0, layout.size_z - 1)
+        self._view.canvas.set_bf_fluor_blend(self._model.bf_fluor_blend)
+        self._view.canvas.set_image_seg_blend(self._model.image_seg_blend)
         self._view.refresh_display(
             self._model.current_image_slice(),
             self._model.current_mask_slice(),
+            overlay_slice=self._model.current_fluorescence_slice(),
         )
         self._refresh_selection()
         self._view.update_navigation_indices(
@@ -263,6 +333,8 @@ class SegmentationPresenter:
             return
         self._refresh_view()
         self._sync_controls()
+        self._sync_fluorescence_ui()
+        self._sync_blend_ui()
 
     def _refresh_mask_only(self) -> None:
         if not self._model.has_data:
