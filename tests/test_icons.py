@@ -45,7 +45,8 @@ def test_lucide_icon_names() -> None:
         LucideIcon.UNDO,
         LucideIcon.REDO,
         LucideIcon.HAND,
-        LucideIcon.MOVE,
+        LucideIcon.SELECT_RECT,
+        LucideIcon.PEN,
         LucideIcon.BRUSH,
         LucideIcon.ERASER,
     ):

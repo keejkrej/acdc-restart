@@ -51,6 +51,8 @@ class SegmentationPresenter:
         c.stroke_finished.connect(self._on_stroke_finished)
         c.pick_at.connect(self._on_pick_at)
         c.rect_pick.connect(self._on_rect_pick)
+        c.pen_finished.connect(self._on_pen_finished)
+        c.pen_cancelled.connect(self._on_pen_cancelled)
 
     def run(self) -> None:
         self._view.show()
@@ -197,6 +199,16 @@ class SegmentationPresenter:
         label_ids = self._model.labels_in_rect(y0, x0, y1, x1)
         active_id = label_ids[0] if label_ids else self._model.label_id
         self._apply_selection(label_ids, active_id=active_id)
+
+    def _on_pen_finished(self, vertices: list) -> None:
+        self._model.commit_polygon(vertices)
+        self._view.set_label_list(
+            self._model.all_label_ids(),
+            selected_ids=self._selected_label_ids,
+        )
+
+    def _on_pen_cancelled(self) -> None:
+        self._model.cancel_stroke()
 
     def _apply_selection(self, label_ids: list[int], *, active_id: int) -> None:
         self._selected_label_ids = list(label_ids)

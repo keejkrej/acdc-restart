@@ -28,7 +28,7 @@ class SegmentationModel:
         self.z_index = 0
         self.brush_size = 4
         self.label_id = 1
-        self.tool = "hand"  # "move" | "hand" | "brush" | "eraser"
+        self.tool = "hand"  # "move" | "hand" | "brush" | "eraser" | "pen"
         self._result: AcdcResult | None = None
         self.saved = True
         self._undo: list[np.ndarray] = []
@@ -149,7 +149,7 @@ class SegmentationModel:
         return int(sl[y, x])
 
     def labels_in_rect(self, y0: int, x0: int, y1: int, x1: int) -> list[int]:
-        """Return label IDs intersecting an inclusive image rectangle."""
+        """Return label IDs fully contained in an inclusive image rectangle."""
         if not self.has_data:
             return []
         return editing.unique_labels_in_rect(
@@ -186,12 +186,18 @@ class SegmentationModel:
         self._last_paint_y = None
         self._last_paint_x = None
 
+    def cancel_stroke(self) -> None:
+        """Discard an in-progress stroke without pushing undo."""
+        self._stroke_snapshot = None
+        self._last_paint_y = None
+        self._last_paint_x = None
+
     def end_stroke(self) -> None:
         if self._stroke_snapshot is None or self.mask is None:
             self._last_paint_y = None
             self._last_paint_x = None
             return
-        if self.tool == "brush" and self.stack_shape is not None:
+        if self.tool in ("brush", "pen") and self.stack_shape is not None:
             sl = stack.extract_slice(self.mask, self.stack_shape, self.t_index, self.z_index)
             if editing.fill_label_holes(sl, self.label_id):
                 self.saved = False
@@ -219,6 +225,13 @@ class SegmentationModel:
         self.mask = self._redo.pop()
         self.saved = False
         return True
+
+    def commit_polygon(self, vertices_yx: list[tuple[int, int]]) -> None:
+        if not self.has_data or self.mask is None or self.stack_shape is None:
+            return
+        sl = stack.extract_slice(self.mask, self.stack_shape, self.t_index, self.z_index)
+        if editing.apply_polygon(sl, vertices_yx, self.label_id):
+            self.set_mask_slice(sl)
 
     def paint(self, y: int, x: int) -> None:
         if not self.has_data or self.mask is None or self.stack_shape is None:

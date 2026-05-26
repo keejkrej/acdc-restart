@@ -52,6 +52,8 @@ class ImageCanvas(QWidget):
     brush_size_changed = Signal(int)
     pick_at = Signal(int, int)  # y, x
     rect_pick = Signal(int, int, int, int)  # y0, x0, y1, x1
+    pen_finished = Signal(list)  # list[tuple[int, int]] (y, x) vertices
+    pen_cancelled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -92,6 +94,10 @@ class ImageCanvas(QWidget):
         self._stroke_armed = False
         self._select_drag_start: tuple[int, int] | None = None
         self._marquee_item: pg.PlotDataItem | None = None
+        self._pen_vertices: list[tuple[int, int]] = []
+        self._pen_item: pg.PlotDataItem | None = None
+        self._pen_rubber_item: pg.PlotDataItem | None = None
+        self._pen_close_radius = 8
         self._selection_items: list[pg.PlotDataItem] = []
         self._viewbox = self._plot.getViewBox()
         self._viewbox.setMenuEnabled(False)
@@ -394,10 +400,87 @@ class ImageCanvas(QWidget):
         self._marquee_item.setData(view_xs, view_ys)
 
     def set_tool(self, tool: str) -> None:
+        if tool != "pen":
+            self._cancel_pen()
         self._tool = tool
         self._finish_stroke_if_armed()
         self._select_drag_start = None
         self._clear_marquee()
+
+    def _clear_pen_overlay(self) -> None:
+        if self._pen_item is not None:
+            self._plot.removeItem(self._pen_item)
+            self._pen_item = None
+
+    def _update_pen_overlay(self, cursor: tuple[int, int] | None = None) -> None:
+        if not self._pen_vertices:
+            self._clear_pen_overlay()
+            return
+        view_xs: list[float] = []
+        view_ys: list[float] = []
+        for y, x in self._pen_vertices:
+            vx, vy = self._view_xy_from_pixel(y, x)
+            view_xs.append(vx)
+            view_ys.append(vy)
+        if len(self._pen_vertices) >= 3:
+            y0, x0 = self._pen_vertices[0]
+            vx0, vy0 = self._view_xy_from_pixel(y0, x0)
+            view_xs.append(vx0)
+            view_ys.append(vy0)
+        pen = pg.mkPen((0, 220, 255), width=1.5)
+        if self._pen_item is None:
+            self._pen_item = pg.PlotDataItem(pen=pen)
+            self._pen_item.setZValue(13)
+            self._plot.addItem(self._pen_item)
+        self._pen_item.setData(view_xs, view_ys)
+        if cursor is not None and self._pen_vertices:
+            cy, cx = cursor
+            ly, lx = self._pen_vertices[-1]
+            vx1, vy1 = self._view_xy_from_pixel(ly, lx)
+            vx2, vy2 = self._view_xy_from_pixel(cy, cx)
+            if self._pen_rubber_item is None:
+                rubber_pen = pg.mkPen((0, 220, 255), width=1, style=Qt.DotLine)
+                self._pen_rubber_item = pg.PlotDataItem(pen=rubber_pen)
+                self._pen_rubber_item.setZValue(13)
+                self._plot.addItem(self._pen_rubber_item)
+            self._pen_rubber_item.setData([vx1, vx2], [vy1, vy2])
+        elif self._pen_rubber_item is not None:
+            self._plot.removeItem(self._pen_rubber_item)
+            self._pen_rubber_item = None
+
+    def _cancel_pen(self) -> None:
+        had_vertices = bool(self._pen_vertices)
+        self._pen_vertices = []
+        self._clear_pen_overlay()
+        if self._pen_rubber_item is not None:
+            self._plot.removeItem(self._pen_rubber_item)
+            self._pen_rubber_item = None
+        if had_vertices:
+            self.pen_cancelled.emit()
+
+    def _commit_pen(self) -> None:
+        if len(self._pen_vertices) < 3:
+            return
+        vertices = list(self._pen_vertices)
+        self._pen_vertices = []
+        self._clear_pen_overlay()
+        if self._pen_rubber_item is not None:
+            self._plot.removeItem(self._pen_rubber_item)
+            self._pen_rubber_item = None
+        self.pen_finished.emit(vertices)
+        self.stroke_finished.emit()
+
+    def _add_pen_vertex(self, y: int, x: int) -> None:
+        if not self._pen_vertices:
+            self.stroke_started.emit()
+        self._pen_vertices.append((y, x))
+        self._update_pen_overlay()
+
+    def _pen_vertex_near_first(self, y: int, x: int) -> bool:
+        if len(self._pen_vertices) < 3:
+            return False
+        y0, x0 = self._pen_vertices[0]
+        return (y - y0) ** 2 + (x - x0) ** 2 <= self._pen_close_radius**2
 
     def set_brush_size(self, size: int) -> None:
         self._brush_size = size
@@ -420,6 +503,21 @@ class ImageCanvas(QWidget):
         if event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_Space and not event.isAutoRepeat():
                 self._space_pan = True
+            elif self._tool == "pen" and not event.isAutoRepeat():
+                if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                    self._commit_pen()
+                    return True
+                if event.key() == Qt.Key_Backspace:
+                    if self._pen_vertices:
+                        self._pen_vertices.pop()
+                        if self._pen_vertices:
+                            self._update_pen_overlay()
+                        else:
+                            self._cancel_pen()
+                    return True
+                if event.key() == Qt.Key_Escape:
+                    self._cancel_pen()
+                    return True
         elif event.type() == QEvent.KeyRelease:
             if event.key() == Qt.Key_Space and not event.isAutoRepeat():
                 self._space_pan = False
@@ -499,6 +597,7 @@ class ImageCanvas(QWidget):
 
         if self._should_pan(button):
             self._finish_stroke_if_armed()
+            self._cancel_pen()
             self._pan_by_drag(ev, axis)
             ev.accept()
             return
@@ -540,6 +639,23 @@ class ImageCanvas(QWidget):
         ev.accept()
 
     def _mouse_click_event(self, ev) -> None:
+        if ev.button() == Qt.LeftButton and self._tool == "pen":
+            mapped = self._map_pos_to_pixel(ev.scenePos())
+            if mapped is not None:
+                y, x = mapped
+                if ev.double():
+                    if not self._pen_vertices:
+                        self._add_pen_vertex(y, x)
+                    elif len(self._pen_vertices) >= 2:
+                        self._commit_pen()
+                    else:
+                        self._add_pen_vertex(y, x)
+                elif self._pen_vertex_near_first(y, x):
+                    self._commit_pen()
+                else:
+                    self._add_pen_vertex(y, x)
+            ev.accept()
+            return
         if ev.button() == Qt.LeftButton and self._paint_tool_active():
             self._toggle_lazy_stroke(ev.scenePos())
             ev.accept()
@@ -547,6 +663,11 @@ class ImageCanvas(QWidget):
         self._orig_click(ev)
 
     def _on_scene_mouse_moved(self, scene_pos) -> None:
+        if self._tool == "pen" and self._pen_vertices:
+            mapped = self._map_pos_to_pixel(scene_pos)
+            if mapped is not None:
+                self._update_pen_overlay(mapped)
+            return
         if self._stroke_armed and self._paint_tool_active():
             self._emit_paint_at(scene_pos)
 
@@ -724,9 +845,10 @@ class SegmentationView(QMainWindow):
         self._undo_act.setIcon(themed_lucide_qicon(LucideIcon.UNDO))
         self._redo_act.setIcon(themed_lucide_qicon(LucideIcon.REDO))
         self._hand_act.setIcon(themed_lucide_qicon(LucideIcon.HAND))
-        self._move_act.setIcon(themed_lucide_qicon(LucideIcon.MOVE))
+        self._move_act.setIcon(themed_lucide_qicon(LucideIcon.SELECT_RECT))
         self._brush_act.setIcon(themed_lucide_qicon(LucideIcon.BRUSH))
         self._eraser_act.setIcon(themed_lucide_qicon(LucideIcon.ERASER))
+        self._pen_act.setIcon(themed_lucide_qicon(LucideIcon.PEN))
 
     def _build_actions(self) -> None:
         self._open_folder_act = QAction("Open experiment…", self)
@@ -769,11 +891,11 @@ class SegmentationView(QMainWindow):
         )
         self._hand_act.triggered.connect(lambda checked: self._on_tool_action("hand", checked))
 
-        self._move_act = QAction("Move", self)
-        self._move_act.setIcon(themed_lucide_qicon(LucideIcon.MOVE))
+        self._move_act = QAction("Select", self)
+        self._move_act.setIcon(themed_lucide_qicon(LucideIcon.SELECT_RECT))
         self._move_act.setCheckable(True)
         self._move_act.setShortcut("V")
-        self._move_act.setToolTip("Move — click or drag to select labels (V)")
+        self._move_act.setToolTip("Select — click or drag a rectangle to select labels (V)")
         self._move_act.triggered.connect(lambda checked: self._on_tool_action("move", checked))
 
         self._brush_act = QAction("Brush", self)
@@ -790,14 +912,25 @@ class SegmentationView(QMainWindow):
         self._eraser_act.setToolTip("Eraser (E)")
         self._eraser_act.triggered.connect(lambda checked: self._on_tool_action("eraser", checked))
 
+        self._pen_act = QAction("Pen", self)
+        self._pen_act.setIcon(themed_lucide_qicon(LucideIcon.PEN))
+        self._pen_act.setCheckable(True)
+        self._pen_act.setShortcut("P")
+        self._pen_act.setToolTip(
+            "Pen — click to draw a polygon; click first point, Enter, or double-click "
+            "to fill (smoothed on commit) (P)"
+        )
+        self._pen_act.triggered.connect(lambda checked: self._on_tool_action("pen", checked))
+
         self._hand_act.setChecked(True)
 
         self._tool_group = QActionGroup(self)
         self._tool_group.setExclusive(True)
-        self._tool_group.addAction(self._move_act)
         self._tool_group.addAction(self._hand_act)
+        self._tool_group.addAction(self._move_act)
         self._tool_group.addAction(self._brush_act)
         self._tool_group.addAction(self._eraser_act)
+        self._tool_group.addAction(self._pen_act)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
@@ -845,10 +978,11 @@ class SegmentationView(QMainWindow):
         bar.setMovable(False)
         bar.setToolButtonStyle(Qt.ToolButtonIconOnly)
         self.addToolBar(Qt.LeftToolBarArea, bar)
-        bar.addAction(self._move_act)
         bar.addAction(self._hand_act)
+        bar.addAction(self._move_act)
         bar.addAction(self._brush_act)
         bar.addAction(self._eraser_act)
+        bar.addAction(self._pen_act)
 
     def _build_labels_dock(self) -> None:
         self._label_panel = LabelListPanel()
@@ -882,6 +1016,7 @@ class SegmentationView(QMainWindow):
             "move": self._move_act,
             "brush": self._brush_act,
             "eraser": self._eraser_act,
+            "pen": self._pen_act,
         }
         if not checked:
             action_by_tool[tool].setChecked(True)
@@ -892,11 +1027,12 @@ class SegmentationView(QMainWindow):
 
     def _update_options_bar(self, tool: str) -> None:
         is_brush = tool == "brush"
-        is_paint = tool in {"brush", "eraser"}
-        self._options_label.setVisible(is_brush)
-        self._label_spin.setVisible(is_brush)
-        self._size_label.setVisible(is_paint)
-        self._size_spin.setVisible(is_paint)
+        is_label_tool = tool in {"brush", "pen"}
+        is_paint = tool in {"brush", "eraser", "pen"}
+        self._options_label.setVisible(is_label_tool)
+        self._label_spin.setVisible(is_label_tool)
+        self._size_label.setVisible(is_paint and tool != "pen")
+        self._size_spin.setVisible(is_paint and tool != "pen")
 
     def ask_open_folder_path(self) -> str | None:
         path = QFileDialog.getExistingDirectory(

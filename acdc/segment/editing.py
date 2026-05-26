@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 from scipy import ndimage
+
+# Chaikin passes applied when committing a pen polygon.
+DEFAULT_POLYGON_SMOOTH_ITERATIONS = 2
 
 
 def apply_brush(
@@ -27,6 +32,84 @@ def apply_brush(
         mask_slice[y0:y1, x0:x1][circle] = 0
     else:
         mask_slice[y0:y1, x0:x1][circle] = np.uint32(label)
+
+
+def smooth_polygon_yx(
+    vertices_yx: Sequence[tuple[float, float]],
+    iterations: int = DEFAULT_POLYGON_SMOOTH_ITERATIONS,
+) -> list[tuple[float, float]]:
+    """Chaikin smooth a closed polygon in ``(y, x)`` image coordinates."""
+    if iterations <= 0 or len(vertices_yx) < 3:
+        return [(float(y), float(x)) for y, x in vertices_yx]
+    pts = [(float(y), float(x)) for y, x in vertices_yx]
+    for _ in range(iterations):
+        n = len(pts)
+        smoothed: list[tuple[float, float]] = []
+        for index in range(n):
+            y0, x0 = pts[index]
+            y1, x1 = pts[(index + 1) % n]
+            smoothed.append((0.75 * y0 + 0.25 * y1, 0.75 * x0 + 0.25 * x1))
+            smoothed.append((0.25 * y0 + 0.75 * y1, 0.25 * x0 + 0.75 * x1))
+        pts = smoothed
+    return pts
+
+
+def polygon_fill_mask(
+    shape: tuple[int, int],
+    vertices_yx: Sequence[tuple[float, float]],
+) -> np.ndarray:
+    """Return a bool mask filled for a closed polygon in ``(y, x)`` coordinates."""
+    height, width = shape
+    fill = np.zeros((height, width), dtype=bool)
+    if len(vertices_yx) < 3:
+        return fill
+
+    points = [(float(x), float(y)) for y, x in vertices_yx]
+    min_row = max(0, int(np.floor(min(point[1] for point in points))))
+    max_row = min(height - 1, int(np.ceil(max(point[1] for point in points))))
+    count = len(points)
+
+    for row in range(min_row, max_row + 1):
+        crossings: list[float] = []
+        for index in range(count):
+            x0, y0 = points[index]
+            x1, y1 = points[(index + 1) % count]
+            if y0 == y1:
+                continue
+            row_min = min(y0, y1)
+            row_max = max(y0, y1)
+            if row < row_min or row >= row_max:
+                continue
+            crossings.append(x0 + (row - y0) * (x1 - x0) / (y1 - y0))
+        crossings.sort()
+        for index in range(0, len(crossings) - 1, 2):
+            col_start = max(0, int(np.ceil(crossings[index])))
+            col_end = min(width - 1, int(np.floor(crossings[index + 1])))
+            if col_start <= col_end:
+                fill[row, col_start : col_end + 1] = True
+    return fill
+
+
+def apply_polygon(
+    mask_slice: np.ndarray,
+    vertices_yx: Sequence[tuple[int, int]],
+    label: int,
+    *,
+    erase: bool = False,
+    smooth_iterations: int = DEFAULT_POLYGON_SMOOTH_ITERATIONS,
+) -> bool:
+    """Fill a closed polygon on a 2D mask slice, smoothing vertices on commit."""
+    if len(vertices_yx) < 3:
+        return False
+    smoothed = smooth_polygon_yx(vertices_yx, smooth_iterations)
+    region = polygon_fill_mask(mask_slice.shape, smoothed)
+    if not np.any(region):
+        return False
+    if erase:
+        mask_slice[region] = 0
+    else:
+        mask_slice[region] = np.uint32(label)
+    return True
 
 
 def apply_brush_stroke(

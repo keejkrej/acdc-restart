@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from acdc.core.data import AcdcData, AcdcResult
 from acdc.core import io, stack
@@ -39,6 +40,39 @@ def test_infer_shape_3d_z() -> None:
     stack_shape = stack.infer_shape((8, 64, 64))
     assert stack_shape.has_z and not stack_shape.has_time
     assert stack_shape.size_z == 8
+
+
+def test_apply_polygon_fills_smoothed_region() -> None:
+    mask = np.zeros((40, 40), dtype=np.uint32)
+    square = [(5, 5), (5, 25), (25, 25), (25, 5)]
+    assert editing.apply_polygon(mask, square, label=4, smooth_iterations=0)
+    assert mask[15, 15] == 4
+    assert mask[0, 0] == 0
+
+    mask2 = np.zeros((40, 40), dtype=np.uint32)
+    assert editing.apply_polygon(mask2, square, label=2, smooth_iterations=2)
+    assert mask2[15, 15] == 2
+
+
+def test_smooth_polygon_adds_vertices() -> None:
+    triangle = [(0, 0), (0, 10), (10, 0)]
+    smoothed = editing.smooth_polygon_yx(triangle, iterations=1)
+    assert len(smoothed) == 6
+
+
+def test_commit_polygon_updates_model_slice() -> None:
+    image = np.zeros((32, 32), dtype=np.uint16)
+    imaged = AcdcData.from_arrays(image)
+    result = AcdcResult.empty_like(imaged)
+    model = SegmentationModel()
+    model.open([imaged], result)
+    model.tool = "pen"
+    model.label_id = 3
+    model.begin_stroke()
+    model.commit_polygon([(4, 4), (4, 20), (20, 20), (20, 4)])
+    model.end_stroke()
+    sl = model.current_mask_slice()
+    assert sl[10, 10] == 3
 
 
 def test_apply_brush_stroke_interpolates() -> None:
@@ -191,3 +225,32 @@ def test_undo(tmp_path: Path) -> None:
     assert model.current_mask_slice()[5, 5] != 0
     assert model.undo()
     assert model.current_mask_slice()[5, 5] == 0
+
+
+def test_segmentation_presenter_rect_pick_selects_fully_contained_labels() -> None:
+    pytest.importorskip("pyqtgraph")
+    import os
+
+    os.environ.setdefault("QT_API", "pyside6")
+    from qtpy.QtWidgets import QApplication
+
+    from acdc.segment.segment_model import SegmentationModel
+    from acdc.segment.segment_presenter import SegmentationPresenter
+    from acdc.segment.segment_view import SegmentationView
+
+    app = QApplication.instance() or QApplication([])
+    mask = np.zeros((20, 20), dtype=np.uint32)
+    mask[5:10, 5:10] = 2
+    model = SegmentationModel()
+    model.image = np.zeros((20, 20), dtype=np.uint8)
+    model.mask = mask
+    model.stack_shape = stack.infer_shape(mask.shape)
+    model._result = AcdcResult(mask)
+
+    view = SegmentationView()
+    presenter = SegmentationPresenter(model, view)
+    view.set_label_list([2], selected_ids=[])
+
+    view.canvas.rect_pick.emit(4, 4, 11, 11)
+
+    assert presenter._selected_label_ids == [2]
