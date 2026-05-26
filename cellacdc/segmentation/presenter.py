@@ -268,18 +268,3 @@ class SegmentationPresenter:
             return
         self._view.refresh_mask(self._display_mask())
         self._refresh_selection()
-
-
-def create_app():
-    """Deprecated: use ``cellacdc.SegmentationViewer`` instead."""
-    import warnings
-
-    from cellacdc.viewer import SegmentationViewer, get_qapp
-
-    warnings.warn(
-        "create_app() is deprecated; use cellacdc.SegmentationViewer()",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    viewer = SegmentationViewer()
-    return get_qapp(), viewer.presenter
