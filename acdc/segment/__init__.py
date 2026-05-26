@@ -1,27 +1,27 @@
 """Manual segmentation mode (MVP architecture)."""
 
 __all__ = [
-    "SegmentationModel",
-    "SegmentationPresenter",
-    "SegmentationView",
+    "SegmentModel",
+    "SegmentPresenter",
+    "SegmentView",
     "SegmentationViewer",
     "current_viewer",
 ]
 
 
 def __getattr__(name: str):
-    if name == "SegmentationModel":
-        from .segment_model import SegmentationModel
+    if name == "SegmentModel":
+        from .segment_model import SegmentModel
 
-        return SegmentationModel
-    if name == "SegmentationPresenter":
-        from .segment_presenter import SegmentationPresenter
+        return SegmentModel
+    if name == "SegmentPresenter":
+        from .segment_presenter import SegmentPresenter
 
-        return SegmentationPresenter
-    if name == "SegmentationView":
-        from .segment_view import SegmentationView
+        return SegmentPresenter
+    if name == "SegmentView":
+        from .segment_view import SegmentView
 
-        return SegmentationView
+        return SegmentView
     if name in {"SegmentationViewer", "current_viewer"}:
         from . import segment_viewer as viewer_module
 

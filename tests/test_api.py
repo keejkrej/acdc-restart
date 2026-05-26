@@ -15,7 +15,7 @@ from acdc.core.data import (
 )
 from acdc.core import io
 from acdc.core import stack
-from acdc.segment.segment_model import SegmentationModel
+from acdc.segment.segment_model import SegmentModel
 
 
 def test_imaged_from_arrays() -> None:
@@ -56,7 +56,7 @@ def test_model_open_edits_result_in_place() -> None:
     image = np.ones((20, 20), dtype=np.uint8)
     imaged = AcdcData.from_arrays(image)
     result = AcdcResult.empty_like(imaged)
-    model = SegmentationModel()
+    model = SegmentModel()
     model.open([imaged], result)
     assert model.has_data
     assert model.mask is result.mask
@@ -71,7 +71,7 @@ def test_model_open_edits_result_in_place() -> None:
 def test_model_save_delegates_to_result(tmp_path: Path) -> None:
     imaged = AcdcData.from_arrays(np.zeros((4, 4), dtype=np.uint8))
     result = AcdcResult.empty_like(imaged)
-    model = SegmentationModel()
+    model = SegmentModel()
     model.open([imaged], result)
     result.mask[0, 0] = 7
     dest = tmp_path / "out.npz"

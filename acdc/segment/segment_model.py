@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from acdc.core.data import AcdcData, AcdcResult
 
 
-class SegmentationModel:
+class SegmentModel:
     """Holds experiment data and editing state for manual segmentation."""
 
     def __init__(self) -> None:

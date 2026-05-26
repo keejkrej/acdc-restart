@@ -795,7 +795,7 @@ class ViewerFrame(QWidget):
         self._transport.update_indices(t, t_max, z, z_max)
 
 
-class SegmentationView(QMainWindow):
+class SegmentView(QMainWindow):
     """Main window UI for manual segmentation."""
 
     open_folder_requested = Signal()

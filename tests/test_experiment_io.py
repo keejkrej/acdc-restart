@@ -11,7 +11,7 @@ from acdc.core.data import AcdcData, AcdcResult
 from acdc.core import experiment, io, metadata, stack
 from acdc.core.stack import shape_from_metadata
 from acdc.segment import editing
-from acdc.segment.segment_model import SegmentationModel
+from acdc.segment.segment_model import SegmentModel
 
 
 def _write_metadata(
@@ -128,7 +128,7 @@ def test_experiment_load_and_save_roundtrip(tmp_path: Path) -> None:
     mask_path = experiment.mask_path(images)
     from acdc.core.data import AcdcResult, load_segmentation
 
-    model = SegmentationModel()
+    model = SegmentModel()
     result = load_segmentation(mask_path, like=imaged)
     model.open([imaged], result, mask_path=mask_path)
     assert model.has_data
@@ -194,7 +194,7 @@ def test_open_image_file_uses_metadata_layout(tmp_path: Path) -> None:
     image_path = images / "test_s01_phase.tif"
     imaged = AcdcData.from_path(image_path)
     result = AcdcResult.empty_like(imaged)
-    model = SegmentationModel()
+    model = SegmentModel()
     mask_path = experiment.mask_path_for_image(image_path)
     model.open([imaged], result, mask_path=mask_path)
     assert model.stack_shape is not None
@@ -209,7 +209,7 @@ def test_open_image_file_without_metadata_uses_heuristic(tmp_path: Path) -> None
     np.save(image_path, np.zeros((8, 32, 32), dtype=np.uint16))
     imaged = AcdcData.from_path(image_path)
     result = AcdcResult.empty_like(imaged)
-    model = SegmentationModel()
+    model = SegmentModel()
     model.open([imaged], result, mask_path=experiment.mask_path_for_image(image_path))
     assert model.stack_shape is not None
     assert model.stack_shape.has_z and not model.stack_shape.has_time

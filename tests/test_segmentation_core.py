@@ -8,7 +8,7 @@ import pytest
 from acdc.core.data import AcdcData, AcdcResult
 from acdc.core import io, stack
 from acdc.segment import editing
-from acdc.segment.segment_model import SegmentationModel
+from acdc.segment.segment_model import SegmentModel
 from acdc.ui.lut import lut_with_hidden_labels
 
 
@@ -20,7 +20,7 @@ def test_apply_brush_and_save_roundtrip(tmp_path: Path) -> None:
 
     tifffile.imwrite(image_path, image)
 
-    model = SegmentationModel()
+    model = SegmentModel()
     imaged = AcdcData.from_path(image_path)
     result = AcdcResult.empty_like(imaged)
     model.open([imaged], result, mask_path=tmp_path / "cellsegm.npz")
@@ -64,7 +64,7 @@ def test_commit_polygon_updates_model_slice() -> None:
     image = np.zeros((32, 32), dtype=np.uint16)
     imaged = AcdcData.from_arrays(image)
     result = AcdcResult.empty_like(imaged)
-    model = SegmentationModel()
+    model = SegmentModel()
     model.open([imaged], result)
     model.tool = "pen"
     model.label_id = 3
@@ -154,7 +154,7 @@ def test_model_label_at_and_rect() -> None:
     mask[2:5, 2:5] = 4
     mask[7:9, 7:9] = 5
     stack_shape = stack.infer_shape(mask.shape)
-    model = SegmentationModel()
+    model = SegmentModel()
     model.image = np.zeros((10, 10), dtype=np.uint8)
     model.mask = mask
     model.stack_shape = stack_shape
@@ -169,7 +169,7 @@ def test_end_stroke_fills_holes(tmp_path: Path) -> None:
     image = np.ones((20, 20), dtype=np.uint8)
     image_path = tmp_path / "a.npy"
     np.save(image_path, image)
-    model = SegmentationModel()
+    model = SegmentModel()
     imaged = AcdcData.from_path(image_path)
     result = AcdcResult.empty_like(imaged)
     model.open([imaged], result, mask_path=tmp_path / "cellsegm.npz")
@@ -189,7 +189,7 @@ def test_all_label_ids() -> None:
     mask[0, 2:6, 2:6] = 1
     mask[3, 8:10, 8:10] = 2
     stack_shape = stack.infer_shape(mask.shape)
-    model = SegmentationModel()
+    model = SegmentModel()
     model.image = np.zeros(mask.shape, dtype=np.uint8)
     model.mask = mask
     model.stack_shape = stack_shape
@@ -204,7 +204,7 @@ def test_current_label_ids() -> None:
     mask[2:6, 2:6] = 1
     mask[8:10, 8:10] = 3
     stack_shape = stack.infer_shape(mask.shape)
-    model = SegmentationModel()
+    model = SegmentModel()
     model.image = np.zeros((16, 16), dtype=np.uint8)
     model.mask = mask
     model.stack_shape = stack_shape
@@ -215,7 +215,7 @@ def test_undo(tmp_path: Path) -> None:
     image = np.ones((16, 16), dtype=np.uint8)
     image_path = tmp_path / "a.npy"
     np.save(image_path, image)
-    model = SegmentationModel()
+    model = SegmentModel()
     imaged = AcdcData.from_path(image_path)
     result = AcdcResult.empty_like(imaged)
     model.open([imaged], result, mask_path=tmp_path / "asegm.npz")
@@ -234,21 +234,21 @@ def test_segmentation_presenter_rect_pick_selects_fully_contained_labels() -> No
     os.environ.setdefault("QT_API", "pyside6")
     from qtpy.QtWidgets import QApplication
 
-    from acdc.segment.segment_model import SegmentationModel
-    from acdc.segment.segment_presenter import SegmentationPresenter
-    from acdc.segment.segment_view import SegmentationView
+    from acdc.segment.segment_model import SegmentModel
+    from acdc.segment.segment_presenter import SegmentPresenter
+    from acdc.segment.segment_view import SegmentView
 
     app = QApplication.instance() or QApplication([])
     mask = np.zeros((20, 20), dtype=np.uint32)
     mask[5:10, 5:10] = 2
-    model = SegmentationModel()
+    model = SegmentModel()
     model.image = np.zeros((20, 20), dtype=np.uint8)
     model.mask = mask
     model.stack_shape = stack.infer_shape(mask.shape)
     model._result = AcdcResult(mask)
 
-    view = SegmentationView()
-    presenter = SegmentationPresenter(model, view)
+    view = SegmentView()
+    presenter = SegmentPresenter(model, view)
     view.set_label_list([2], selected_ids=[])
 
     view.canvas.rect_pick.emit(4, 4, 11, 11)

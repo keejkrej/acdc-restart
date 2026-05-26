@@ -10,9 +10,9 @@ from acdc.app import exec_until_closed, get_qapp
 from acdc.core.data import AcdcData, AcdcResult, coalesce_images
 
 if TYPE_CHECKING:
-    from acdc.segment.segment_model import SegmentationModel
-    from acdc.segment.segment_presenter import SegmentationPresenter
-    from acdc.segment.segment_view import SegmentationView
+    from acdc.segment.segment_model import SegmentModel
+    from acdc.segment.segment_presenter import SegmentPresenter
+    from acdc.segment.segment_view import SegmentView
 
 _current_viewer: SegmentationViewer | None = None
 
@@ -24,13 +24,13 @@ class SegmentationViewer:
 
     def __init__(self, *, show: bool = False) -> None:
         get_qapp()
-        from acdc.segment.segment_model import SegmentationModel
-        from acdc.segment.segment_presenter import SegmentationPresenter
-        from acdc.segment.segment_view import SegmentationView
+        from acdc.segment.segment_model import SegmentModel
+        from acdc.segment.segment_presenter import SegmentPresenter
+        from acdc.segment.segment_view import SegmentView
 
-        self._model = SegmentationModel()
-        self._view = SegmentationView()
-        self._presenter = SegmentationPresenter(self._model, self._view)
+        self._model = SegmentModel()
+        self._view = SegmentView()
+        self._presenter = SegmentPresenter(self._model, self._view)
         self._result: AcdcResult | None = None
         self._images: tuple[AcdcData, ...] = ()
         self._instances.add(self)
@@ -38,15 +38,15 @@ class SegmentationViewer:
             self.show()
 
     @property
-    def model(self) -> SegmentationModel:
+    def model(self) -> SegmentModel:
         return self._model
 
     @property
-    def view(self) -> SegmentationView:
+    def view(self) -> SegmentView:
         return self._view
 
     @property
-    def presenter(self) -> SegmentationPresenter:
+    def presenter(self) -> SegmentPresenter:
         return self._presenter
 
     @property

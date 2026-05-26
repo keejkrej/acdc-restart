@@ -13,14 +13,14 @@ from acdc.ui.open_experiment import pick_experiment_images
 from acdc.utils.channels import channel_display_name
 
 from .editing import apply_label_visibility
-from .segment_model import SegmentationModel
-from .segment_view import SegmentationView
+from .segment_model import SegmentModel
+from .segment_view import SegmentView
 
 
-class SegmentationPresenter:
+class SegmentPresenter:
     """MVP presenter for manual segmentation."""
 
-    def __init__(self, model: SegmentationModel, view: SegmentationView) -> None:
+    def __init__(self, model: SegmentModel, view: SegmentView) -> None:
         self._model = model
         self._view = view
         self._selected_label_ids: list[int] = []

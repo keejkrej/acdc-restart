@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from acdc.core.data import AcdcData, coalesce_images
-from acdc.segment.segment_model import SegmentationModel
+from acdc.segment.segment_model import SegmentModel
 from acdc.volume.volume_model import VolumeModel
 from tests.test_experiment_io import _make_position
 
@@ -28,7 +28,7 @@ def test_segmentation_model_multi_channel_open(tmp_path: Path) -> None:
     from acdc.core.data import AcdcResult
 
     result = AcdcResult.empty_like(channel_images[0])
-    model = SegmentationModel()
+    model = SegmentModel()
     model.open(channel_images, result)
     assert model.channels == list(channel_images)
     assert len(model.current_channel_slices()) == 2
