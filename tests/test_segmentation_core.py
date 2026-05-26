@@ -74,6 +74,55 @@ def test_apply_label_visibility() -> None:
     assert hidden[6, 6] == 0
 
 
+def test_find_outer_boundaries() -> None:
+    mask = np.zeros((8, 8), dtype=np.uint32)
+    mask[2:6, 2:6] = 1
+    boundary = tools.find_outer_boundaries(mask)
+    assert boundary[2, 3]
+    assert not boundary[3, 3]
+    assert boundary.sum() == 12
+
+
+def test_labels_to_contour_rgba() -> None:
+    mask = np.zeros((8, 8), dtype=np.uint32)
+    mask[2:6, 2:6] = 1
+    lut = tools.build_label_lut(8, alpha=0.45)
+    rgba = tools.labels_to_contour_rgba(mask, lut)
+    assert rgba[2, 3, 3] == 255
+    assert rgba[3, 3, 3] == 0
+
+
+def test_unique_labels_in_rect() -> None:
+    mask = np.zeros((10, 10), dtype=np.uint32)
+    mask[1:4, 1:4] = 1
+    mask[6:8, 6:8] = 2
+    assert tools.unique_labels_in_rect(mask, 0, 0, 5, 5) == [1]
+    assert tools.unique_labels_in_rect(mask, 0, 0, 9, 9) == [1, 2]
+    assert tools.unique_labels_in_rect(mask, 8, 8, 8, 8) == []
+
+
+def test_label_bounding_box() -> None:
+    mask = np.zeros((10, 10), dtype=np.uint32)
+    mask[2:5, 3:7] = 3
+    assert tools.label_bounding_box(mask, 3) == (2, 3, 4, 6)
+    assert tools.label_bounding_box(mask, 0) is None
+
+
+def test_model_label_at_and_rect() -> None:
+    mask = np.zeros((10, 10), dtype=np.uint32)
+    mask[2:5, 2:5] = 4
+    mask[7:9, 7:9] = 5
+    layout = tools.infer_layout(mask.shape)
+    model = SegmentationModel()
+    model.image = np.zeros((10, 10), dtype=np.uint8)
+    model.mask = mask
+    model.layout = layout
+    assert model.label_at(3, 3) == 4
+    assert model.label_at(0, 0) == 0
+    assert model.labels_in_rect(0, 0, 5, 5) == [4]
+    assert model.labels_in_rect(0, 0, 9, 9) == [4, 5]
+
+
 def test_end_stroke_fills_holes(tmp_path: Path) -> None:
     image = np.ones((20, 20), dtype=np.uint8)
     image_path = tmp_path / "a.npy"
@@ -84,6 +133,7 @@ def test_end_stroke_fills_holes(tmp_path: Path) -> None:
     sl[2:18, 2:18] = 1
     sl[5:15, 5:15] = 0
     model.set_mask_slice(sl)
+    model.tool = "brush"
     model.begin_stroke()
     model.paint(3, 3)
     model.end_stroke()

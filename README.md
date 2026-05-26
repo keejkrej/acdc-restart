@@ -36,16 +36,55 @@ uv sync
 uv run acdc-seg
 ```
 
+## Programmatic API
+
+Load data and open the viewer without tying edits to filesystem I/O:
+
+```python
+import cellacdc
+
+data = cellacdc.ExperimentData.from_path("/path/to/experiment", channel="phase")
+result = cellacdc.SegmentationResult.empty_like(data)
+
+cellacdc.imshow(data, result=result)
+cellacdc.run()  # start the Qt event loop
+
+# Edits are written directly into result.mask
+assert result.dirty
+result.save("/optional/path/segm.npz")
+```
+
+- **`Experiment`** (`ExperimentData` alias) — read-only image volume + layout metadata
+- **`SegmentationResult`** — mutable `uint32` mask the GUI edits in place
+- **`imshow(data, result=...)`** — binds arrays to the viewer; omits `result` to auto-load `{basename}segm.npz` or start empty
+- **`run()`** — runs the Qt event loop (also callable after `uv run acdc-seg`)
+
+Fully in-memory workflow:
+
+```python
+import numpy as np
+import cellacdc
+
+image = np.zeros((128, 128), dtype=np.uint16)
+data = cellacdc.Experiment.from_arrays(image, title="demo")
+result = cellacdc.SegmentationResult.empty_like(data)
+cellacdc.imshow(data, result=result)
+cellacdc.run()
+```
+
 ## Layout
 
 ```
 cellacdc/
+  __init__.py              # Public API: Experiment, SegmentationResult, imshow, run
+  data.py                  # Experiment + SegmentationResult types
+  session.py               # imshow / run session
   __main__.py              # CLI entry
   segmentation/
-    model.py               # State and I/O orchestration
+    model.py               # Editing state (binds to SegmentationResult)
     view.py                # Qt / pyqtgraph UI
     presenter.py           # MVP wiring
-    experiment.py           # Cell-ACDC folder discovery
+    experiment.py          # Cell-ACDC folder discovery
     io.py                  # Cell-ACDC mask format
     tools.py               # Brush math and stack helpers
 ```

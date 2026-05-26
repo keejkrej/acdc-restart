@@ -18,7 +18,9 @@ class SegmentationPresenter:
     def __init__(self, model: SegmentationModel, view: SegmentationView) -> None:
         self._model = model
         self._view = view
+        self._selected_label_ids: list[int] = []
         self._connect()
+        self._model.tool = "hand"
 
     def _connect(self) -> None:
         v = self._view
@@ -39,9 +41,19 @@ class SegmentationPresenter:
         c.paint_at.connect(self._on_paint_at)
         c.stroke_started.connect(self._model.begin_stroke)
         c.stroke_finished.connect(self._on_stroke_finished)
+        c.pick_at.connect(self._on_pick_at)
+        c.rect_pick.connect(self._on_rect_pick)
 
     def run(self) -> None:
         self._view.show()
+
+    def open(self, experiment, result) -> None:
+        """Load programmatic ``Experiment`` + ``SegmentationResult`` into the viewer."""
+        self._model.open(experiment, result)
+        self._view.reset_label_visibility()
+        self._selected_label_ids = []
+        self._sync_controls()
+        self._refresh()
 
     def _on_open_folder(self) -> None:
         path = self._view.ask_open_folder_path()
@@ -91,6 +103,7 @@ class SegmentationPresenter:
             return
 
         self._view.reset_label_visibility()
+        self._selected_label_ids = []
         self._sync_controls()
         self._refresh()
 
@@ -104,6 +117,7 @@ class SegmentationPresenter:
             QMessageBox.critical(self._view, "Open failed", str(exc))
             return
         self._view.reset_label_visibility()
+        self._selected_label_ids = []
         self._sync_controls()
         self._refresh()
 
@@ -145,6 +159,8 @@ class SegmentationPresenter:
 
     def _on_label_id_changed(self, label_id: int) -> None:
         self._model.label_id = label_id
+        self._selected_label_ids = [label_id]
+        self._refresh_selection()
 
     def _on_brush_size_changed(self, size: int) -> None:
         self._model.brush_size = size
@@ -171,6 +187,34 @@ class SegmentationPresenter:
         self._view.set_label_list(
             self._model.all_label_ids(),
             active_id=self._model.label_id,
+        )
+
+    def _on_pick_at(self, y: int, x: int) -> None:
+        label_id = self._model.label_at(y, x)
+        if label_id > 0:
+            self._apply_selection([label_id], active_id=label_id)
+        else:
+            self._apply_selection([], active_id=self._model.label_id)
+
+    def _on_rect_pick(self, y0: int, x0: int, y1: int, x1: int) -> None:
+        label_ids = self._model.labels_in_rect(y0, x0, y1, x1)
+        active_id = label_ids[0] if label_ids else self._model.label_id
+        self._apply_selection(label_ids, active_id=active_id)
+
+    def _apply_selection(self, label_ids: list[int], *, active_id: int) -> None:
+        self._selected_label_ids = list(label_ids)
+        if label_ids:
+            self._model.label_id = active_id
+            self._view.set_label_id(active_id)
+        self._view.set_label_selection(label_ids, active_id=active_id)
+        self._refresh_selection()
+
+    def _refresh_selection(self) -> None:
+        if not self._model.has_data:
+            return
+        self._view.set_selection_overlay(
+            self._selected_label_ids,
+            self._display_mask(),
         )
 
     def _sync_controls(self) -> None:
@@ -205,6 +249,7 @@ class SegmentationPresenter:
             self._model.current_image_slice(),
             self._display_mask(),
         )
+        self._refresh_selection()
         self._view.update_navigation_indices(
             self._model.t_index,
             t_max,
@@ -222,6 +267,7 @@ class SegmentationPresenter:
         if not self._model.has_data:
             return
         self._view.refresh_mask(self._display_mask())
+        self._refresh_selection()
 
 
 def create_app() -> tuple[QApplication, SegmentationPresenter]:

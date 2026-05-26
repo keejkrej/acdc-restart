@@ -192,6 +192,92 @@ def apply_label_visibility(
     return np.where(np.isin(mask_slice, hidden), np.uint32(0), mask_slice)
 
 
+def find_outer_boundaries(label_img: np.ndarray) -> np.ndarray:
+    """Return a bool mask of outer label edges (4-connected)."""
+    lab = np.asarray(label_img)
+    fg = lab > 0
+    if not np.any(fg):
+        return np.zeros(lab.shape, dtype=bool)
+    boundary = np.zeros(lab.shape, dtype=bool)
+    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        neighbor = np.zeros_like(lab)
+        if dy == -1:
+            neighbor[1:, :] = lab[:-1, :]
+        elif dy == 1:
+            neighbor[:-1, :] = lab[1:, :]
+        elif dx == -1:
+            neighbor[:, 1:] = lab[:, :-1]
+        else:
+            neighbor[:, :-1] = lab[:, 1:]
+        boundary |= fg & (neighbor != lab)
+    return boundary
+
+
+def normalize_rect(
+    y0: int,
+    x0: int,
+    y1: int,
+    x1: int,
+) -> tuple[int, int, int, int]:
+    """Return inclusive ``(ymin, xmin, ymax, xmax)`` from two corners."""
+    return min(y0, y1), min(x0, x1), max(y0, y1), max(x0, x1)
+
+
+def unique_labels_in_rect(
+    mask_slice: np.ndarray,
+    y0: int,
+    x0: int,
+    y1: int,
+    x1: int,
+) -> list[int]:
+    """Return sorted label IDs with pixels inside the inclusive rectangle."""
+    ymin, xmin, ymax, xmax = normalize_rect(y0, x0, y1, x1)
+    h, w = mask_slice.shape
+    ymin = max(0, ymin)
+    xmin = max(0, xmin)
+    ymax = min(h - 1, ymax)
+    xmax = min(w - 1, xmax)
+    if ymin > ymax or xmin > xmax:
+        return []
+    region = mask_slice[ymin : ymax + 1, xmin : xmax + 1]
+    ids = np.unique(region)
+    return sorted(int(label) for label in ids if label > 0)
+
+
+def label_bounding_box(
+    mask_slice: np.ndarray,
+    label_id: int,
+) -> tuple[int, int, int, int] | None:
+    """Return inclusive ``(ymin, xmin, ymax, xmax)`` for ``label_id``."""
+    if label_id <= 0:
+        return None
+    ys, xs = np.where(mask_slice == label_id)
+    if ys.size == 0:
+        return None
+    return int(ys.min()), int(xs.min()), int(ys.max()), int(xs.max())
+
+
+def labels_to_contour_rgba(
+    mask_slice: np.ndarray,
+    lut: np.ndarray,
+    *,
+    thickness: int = 1,
+    alpha: int = 255,
+) -> np.ndarray:
+    """Build an RGBA contour overlay for visible labels."""
+    h, w = mask_slice.shape
+    rgba = np.zeros((h, w, 4), dtype=np.ubyte)
+    boundary = find_outer_boundaries(mask_slice)
+    if not np.any(boundary):
+        return rgba
+    if thickness > 1:
+        boundary = ndimage.binary_dilation(boundary, iterations=thickness - 1)
+    ids = mask_slice[boundary].astype(np.intp)
+    rgba[boundary] = lut[ids]
+    rgba[boundary, 3] = np.ubyte(alpha)
+    return rgba
+
+
 def _label_rgb(label: int, c: float = 0.85) -> tuple[float, float, float]:
     hue = (int(label) * 47) % 360
     hp = hue / 60.0

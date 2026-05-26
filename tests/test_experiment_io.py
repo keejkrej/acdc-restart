@@ -127,3 +127,39 @@ def test_load_metadata_csv(tmp_path: Path) -> None:
     meta = io.load_metadata_csv(csv_path)
     assert meta["basename"] == "foo_"
     assert meta["SizeT"] == "5"
+
+
+def test_infer_image_file_context_uses_metadata(tmp_path: Path) -> None:
+    images = _make_position(tmp_path, "Position_1", size_t=4)
+    image_path = images / "test_s01_phase.tif"
+    ctx = experiment.infer_image_file_context(image_path)
+    assert ctx.size_t == 4
+    assert ctx.size_z == 1
+    assert ctx.basename == "test_s01_"
+    assert ctx.channel_name == "phase"
+    assert ctx.mask_path == images / "test_s01_segm.npz"
+    assert ctx.images_path == images
+    assert ctx.position_name == "Position_1"
+
+
+def test_load_image_file_uses_metadata_layout(tmp_path: Path) -> None:
+    images = _make_position(tmp_path, "Position_1", size_t=4, with_segm=False)
+    image_path = images / "test_s01_phase.tif"
+    model = SegmentationModel()
+    model.load_image(image_path)
+    assert model.layout is not None
+    assert model.layout.has_time and not model.layout.has_z
+    assert model.layout.size_t == 4
+    assert model.mask_path == images / "test_s01_segm.npz"
+    assert model.channel_name == "phase"
+
+
+def test_load_image_file_without_metadata_uses_heuristic(tmp_path: Path) -> None:
+    image_path = tmp_path / "stack.npy"
+    np.save(image_path, np.zeros((8, 32, 32), dtype=np.uint16))
+    model = SegmentationModel()
+    model.load_image(image_path)
+    assert model.layout is not None
+    assert model.layout.has_z and not model.layout.has_time
+    assert model.mask_path == tmp_path / "stacksegm.npz"
+    assert model.images_path is None

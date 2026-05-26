@@ -27,6 +27,19 @@ class PositionLoadSpec:
     size_z: int | None
 
 
+@dataclass(frozen=True)
+class ImageFileLoadContext:
+    """Metadata and mask paths inferred from an image file's folder."""
+
+    size_t: int | None
+    size_z: int | None
+    mask_path: Path
+    images_path: Path | None
+    position_name: str | None
+    basename: str | None
+    channel_name: str | None
+
+
 def _listdir_names(path: Path) -> list[str]:
     if not path.is_dir():
         return []
@@ -178,6 +191,40 @@ def load_metadata_layout(images_path: Path) -> tuple[int | None, int | None]:
     size_t = _parse_int(metadata.get("SizeT"))
     size_z = _parse_int(metadata.get("SizeZ"))
     return size_t, size_z
+
+
+def infer_image_file_context(image_path: Path) -> ImageFileLoadContext:
+    """Infer layout metadata and mask path from ``metadata.csv`` in the same folder."""
+    image_path = Path(image_path)
+    folder = image_path.parent
+    metadata_path = _metadata_csv_path(folder)
+    size_t, size_z = load_metadata_layout(folder)
+
+    basename: str | None = None
+    channel_name: str | None = None
+    mask_path = io.segm_path_for_image(image_path)
+    images_path: Path | None = None
+    position_name: str | None = None
+
+    if metadata_path is not None:
+        metadata = io.load_metadata_csv(metadata_path)
+        basename = metadata.get("basename") or None
+        if basename:
+            channel_name = _channel_from_file(image_path.name, basename)
+            mask_path = segm_file_path(folder, basename)
+        images_path = folder
+        if folder.name == "Images":
+            position_name = position_name_from_images_path(folder)
+
+    return ImageFileLoadContext(
+        size_t=size_t,
+        size_z=size_z,
+        mask_path=mask_path,
+        images_path=images_path,
+        position_name=position_name,
+        basename=basename,
+        channel_name=channel_name,
+    )
 
 
 def _parse_int(value: str | None) -> int | None:

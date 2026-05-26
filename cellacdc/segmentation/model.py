@@ -1,12 +1,16 @@
-"""Segmentation model: image/mask state and persistence (no Qt)."""
+"""Segmentation model: image/mask state (no Qt)."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from . import experiment, io, tools
+
+if TYPE_CHECKING:
+    from cellacdc.data import Experiment, SegmentationResult
 
 
 class SegmentationModel:
@@ -22,12 +26,14 @@ class SegmentationModel:
         self.position_name: str | None = None
         self.basename: str | None = None
         self.channel_name: str | None = None
+        self.title: str = ""
         self.t_index = 0
         self.z_index = 0
         self.brush_size = 4
         self.label_id = 1
-        self.tool = "brush"  # "brush" | "eraser"
-        self.dirty = False
+        self.tool = "hand"  # "move" | "hand" | "brush" | "eraser"
+        self._result: SegmentationResult | None = None
+        self._dirty = False
         self._undo: list[np.ndarray] = []
         self._redo: list[np.ndarray] = []
         self._stroke_snapshot: np.ndarray | None = None
@@ -35,14 +41,55 @@ class SegmentationModel:
         self._last_paint_x: int | None = None
 
     @property
+    def dirty(self) -> bool:
+        if self._result is not None:
+            return self._result.dirty
+        return self._dirty
+
+    @dirty.setter
+    def dirty(self, value: bool) -> None:
+        if self._result is not None:
+            self._result.dirty = value
+        else:
+            self._dirty = value
+
+    @property
+    def result(self) -> SegmentationResult | None:
+        return self._result
+
+    @property
     def has_data(self) -> bool:
         return self.image is not None and self.mask is not None and self.layout is not None
+
+    def open(self, experiment: Experiment, result: SegmentationResult) -> None:
+        """Bind in-memory experiment input and a live segmentation result."""
+        if result.mask.shape != experiment.image.shape:
+            raise ValueError(
+                f"Mask shape {result.mask.shape} does not match "
+                f"image shape {experiment.image.shape}"
+            )
+        self.image = experiment.image
+        self.mask = result.mask
+        self.layout = experiment.layout
+        self._result = result
+        self.image_path = experiment.image_path
+        self.mask_path = result.save_path or experiment.mask_path
+        self.images_path = experiment.images_path
+        self.position_name = experiment.position_name
+        self.basename = experiment.basename
+        self.channel_name = experiment.channel_name
+        self.title = experiment.title
+        self.t_index = 0
+        self.z_index = 0
+        self.dirty = False
+        self._clear_history()
 
     def _clear_experiment_context(self) -> None:
         self.images_path = None
         self.position_name = None
         self.basename = None
         self.channel_name = None
+        self.title = ""
 
     def _load_arrays(
         self,
@@ -55,6 +102,7 @@ class SegmentationModel:
         position_name: str | None = None,
         basename: str | None = None,
         channel_name: str | None = None,
+        title: str = "",
     ) -> None:
         if mask_path.is_file():
             mask = io.load_mask(mask_path)
@@ -65,6 +113,7 @@ class SegmentationModel:
             mask = io.empty_mask_like(image)
             saved_mask_path = mask_path
 
+        self._result = None
         self.image = image
         self.mask = mask
         self.layout = layout
@@ -74,6 +123,7 @@ class SegmentationModel:
         self.position_name = position_name
         self.basename = basename
         self.channel_name = channel_name
+        self.title = title
         self.t_index = 0
         self.z_index = 0
         self.dirty = False
@@ -82,18 +132,33 @@ class SegmentationModel:
     def load_image(self, path: Path) -> None:
         path = Path(path)
         image = io.load_image(path)
-        layout = tools.infer_layout(image.shape)
-        mask_path = io.segm_path_for_image(path)
+        ctx = experiment.infer_image_file_context(path)
+        layout = tools.layout_from_metadata(image.shape, ctx.size_t, ctx.size_z)
+        if ctx.position_name and ctx.channel_name:
+            title = f"{ctx.position_name} / {ctx.channel_name}"
+        elif ctx.channel_name:
+            title = f"{path.name} ({ctx.channel_name})"
+        else:
+            title = path.name
         self._load_arrays(
             image,
             layout,
             path,
-            mask_path,
+            ctx.mask_path,
+            images_path=ctx.images_path,
+            position_name=ctx.position_name,
+            basename=ctx.basename,
+            channel_name=ctx.channel_name,
+            title=title,
         )
 
     def load_position(self, spec: experiment.PositionLoadSpec) -> None:
         image = io.load_image(spec.image_path)
         layout = tools.layout_from_metadata(image.shape, spec.size_t, spec.size_z)
+        if spec.position_name and spec.channel_name:
+            title = f"{spec.position_name} / {spec.channel_name}"
+        else:
+            title = spec.image_path.name
         self._load_arrays(
             image,
             layout,
@@ -103,11 +168,16 @@ class SegmentationModel:
             position_name=spec.position_name,
             basename=spec.basename,
             channel_name=spec.channel_name,
+            title=title,
         )
 
     def save_mask(self, path: Path | None = None) -> Path:
         if not self.has_data or self.mask is None:
             raise RuntimeError("No mask loaded")
+        if self._result is not None:
+            dest = self._result.save(path)
+            self.mask_path = dest
+            return dest
         dest = Path(path) if path is not None else self.mask_path
         if dest is None:
             raise RuntimeError("No mask path set")
@@ -117,6 +187,8 @@ class SegmentationModel:
         return dest
 
     def status_label(self) -> str:
+        if self.title:
+            return self.title
         if self.position_name and self.channel_name:
             return f"{self.position_name} / {self.channel_name}"
         if self.image_path is not None:
@@ -137,6 +209,28 @@ class SegmentationModel:
             return []
         ids = np.unique(self.current_mask_slice())
         return sorted(int(label) for label in ids if label > 0)
+
+    def label_at(self, y: int, x: int) -> int:
+        """Return the label ID at ``(y, x)`` on the current slice (0 if background)."""
+        if not self.has_data:
+            return 0
+        sl = self.current_mask_slice()
+        h, w = sl.shape
+        if not (0 <= y < h and 0 <= x < w):
+            return 0
+        return int(sl[y, x])
+
+    def labels_in_rect(self, y0: int, x0: int, y1: int, x1: int) -> list[int]:
+        """Return label IDs intersecting an inclusive image rectangle."""
+        if not self.has_data:
+            return []
+        return tools.unique_labels_in_rect(
+            self.current_mask_slice(),
+            y0,
+            x0,
+            y1,
+            x1,
+        )
 
     def all_label_ids(self) -> list[int]:
         """Return sorted unique label IDs in the full mask (excluding background)."""
